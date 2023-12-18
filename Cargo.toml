@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 rust-6502 = { git = "https://github.com/kurtjd/rust-6502.git", branch = "main" }
+sdl2 = "0.36.0"
