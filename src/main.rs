@@ -12,10 +12,14 @@ use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 
 // Addresses
-const ROM_START_ADDR: usize = 0xD000;
+const ROM_START_ADDR: usize = 0xC000;
+const DISK2_START_ADDR: usize = 0xC600;
+const FW_START_ADDR: usize = 0xD000;
 const INPUT_DATA_ADDR: usize = 0xC000;
 
 // Soft-switches (simply accessing these causes behavior)
+
+// Note: Accessing any value in the page (for keyboard/speaker) causes behavior
 const INPUT_CLEAR_ADDR: usize = 0xC010;
 const SPEAKER_ADDR: usize = 0xC030;
 
@@ -42,6 +46,7 @@ const PIXEL_OFF_COLOR: u8 = 0x00;
 const CHAR_WIDTH: u32 = 7;
 const CHAR_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
+const PERIPH_ROM_SZ: usize = 0x100;
 
 struct GfxHelper<'a> {
     canvas: Canvas<Window>,
@@ -126,6 +131,31 @@ fn handle_soft_sw(cpu: &mut Cpu6502) {
     }
 }
 
+fn get_shift_ascii(ascii: u8) -> u8 {
+    match ascii {
+        b'1' => b'!',
+        b'2' => b'@',
+        b'3' => b'#',
+        b'4' => b'$',
+        b'5' => b'%',
+        b'6' => b'^',
+        b'7' => b'&',
+        b'8' => b'*',
+        b'9' => b'(',
+        b'0' => b')',
+        b'-' => b'_',
+        b'=' => b'+',
+        b'[' => b'{',
+        b']' => b'}',
+        b';' => b':',
+        b'\'' => b'"',
+        b',' => b'<',
+        b'.' => b'>',
+        b'/' => b'?',
+        _ => ascii
+    }
+}
+
 fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
     for event in event_pump.poll_iter() {
         match event {
@@ -140,38 +170,18 @@ fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
                     continue;
                 }
 
+                // Convert lowercase to uppercase
                 let mut ascii = keycode as u8;
                 if ascii >= b'a' && ascii <= b'z' {
                     ascii -= 32;
                 }
 
+                // Get the proper ASCII character if shift held
                 if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) {
-                    ascii = match ascii {
-                        b'1' => b'!',
-                        b'2' => b'@',
-                        b'3' => b'#',
-                        b'4' => b'$',
-                        b'5' => b'%',
-                        b'6' => b'^',
-                        b'7' => b'&',
-                        b'8' => b'*',
-                        b'9' => b'(',
-                        b'0' => b')',
-
-                        b'-' => b'_',
-                        b'=' => b'+',
-
-                        b'[' => b'{',
-                        b']' => b'}',
-                        b';' => b':',
-                        b'\'' => b'"',
-                        b',' => b'<',
-                        b'.' => b'>',
-                        b'/' => b'?',
-                        _ => ascii
-                    };
+                    ascii = get_shift_ascii(ascii);
                 }
 
+                // The Apple 2 has the high bit set for ASCII characters
                 cpu.ram[INPUT_DATA_ADDR] = ascii | (1 << 7);
             }
             _ => {}
@@ -182,8 +192,20 @@ fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
 }
 
 fn load_rom(cpu: &mut Cpu6502) {
-    let mut rom = File::open("roms/firmware/Apple2_Plus.rom").expect("Failed to opem ROM file!");
-    rom.read_exact(&mut cpu.ram[ROM_START_ADDR..]).expect("Failed to read ROM data!");
+    // Firmware ROM
+    let mut fw_rom = File::open("roms/firmware/Apple2_Plus.rom").expect("Failed to opem firmware ROM!");
+    fw_rom.read_exact(&mut cpu.ram[FW_START_ADDR..]).expect("Failed to read firmware ROM data!");
+
+    // Disk II ROM
+    let mut disc_rom = File::open("roms/firmware/Disk2.rom").expect("Failed to open Disk II ROM!");
+    disc_rom.read_exact(&mut cpu.ram[DISK2_START_ADDR..DISK2_START_ADDR + PERIPH_ROM_SZ]).expect("Failed to read Disk II ROM data!");
+}
+
+fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
+    let mut char_rom = File::open("roms/firmware/Character_Set.rom").expect("Failed to open charset ROM!");
+    let mut char_array: [u8; CHAR_ROM_SIZE] = [0; CHAR_ROM_SIZE];
+    char_rom.read_exact(&mut char_array).expect("Failed to read char ROM data!");
+    char_array
 }
 
 fn main() {
@@ -200,28 +222,22 @@ fn main() {
     // Get the canvas to draw on
     let canvas = window.into_canvas().build().unwrap();
 
-    // Texture stuff
+    // Create a texture that we use as a pixel map to draw to
     let texture_creator = canvas.texture_creator();
     let texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIN_WIDTH, WIN_HEIGHT).unwrap();
 
-    // Character data
-    let mut char_rom = File::open("roms/firmware/charset.bin").expect("Failed to open charset ROM!");
-    let mut char_array: [u8; CHAR_ROM_SIZE] = [0; CHAR_ROM_SIZE];
-    char_rom.read_exact(&mut char_array).expect("Failed to read char ROM data!");
-
+    // Create helper struct that gives us quick access to SDL graphical and event stuff
     let mut gfx_helper = GfxHelper {
         canvas: canvas,
         event_pump: sdl_context.event_pump().unwrap(),
         pixel_buf: [PIXEL_OFF_COLOR; (WIN_WIDTH * WIN_HEIGHT * PIXEL_SIZE) as usize],
         pixel_surface: texture,
-        char_data: char_array
+        char_data: load_char_set()
     };
 
 
-
-
-    // Initialize CPU
-    let mut cpu = Cpu6502::new(0xC000);
+    // Initialize CPU and load firmware/ROMs
+    let mut cpu = Cpu6502::new(ROM_START_ADDR);
     load_rom(&mut cpu);
     cpu.reset();
 
