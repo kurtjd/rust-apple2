@@ -9,7 +9,7 @@ use std::time::Duration;
 use sdl2::{EventPump, video::Window, render::Canvas, render::Texture};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
+use sdl2::keyboard::{Keycode, Mod};
 
 // Addresses
 const ROM_START_ADDR: usize = 0xD000;
@@ -18,12 +18,16 @@ const INPUT_DATA_ADDR: usize = 0xC000;
 // Soft-switches (simply accessing these causes behavior)
 const INPUT_CLEAR_ADDR: usize = 0xC010;
 const SPEAKER_ADDR: usize = 0xC030;
+
 const GFX_MODE_ADDR: usize = 0xC050;
 const TXT_MODE_ADDR: usize = 0xC051;
+
 const SINGLE_MODE_ADDR: usize = 0xC052;
 const MIXED_MODE_ADDR: usize = 0xC053;
+
 const PG1_MODE_ADDR: usize = 0xC054;
 const PG2_MODE_ADDR: usize = 0xC055;
+
 const LORES_MODE_ADDR: usize = 0xC056;
 const HIRES_MODE_ADDR: usize = 0xC057;
 
@@ -58,7 +62,7 @@ fn print_character(val: u8, cell_idx: usize, gfx_helper: &mut GfxHelper) {
     for i in char_addr..char_addr + CHAR_HEIGHT as usize {
         let mut char_map = gfx_helper.char_data[i];
         if val & (1 << 7) == 0 {
-            char_map ^= 0xFE; // Invert all bits except last ..?
+            char_map ^= 0xFF; // Invert all bits
         }
         char_map <<= 1;
 
@@ -112,15 +116,63 @@ fn handle_gfx(cpu: &Cpu6502, gfx_helper: &mut GfxHelper) {
     gfx_helper.canvas.present();
 }
 
+fn handle_soft_sw(cpu: &mut Cpu6502) {
+    for c in &mut cpu.cycles {
+        match c.address {
+            INPUT_CLEAR_ADDR => { cpu.ram[INPUT_DATA_ADDR] &= !(1 << 7) },
+            // Other addresses
+            _ => {}
+        }
+    }
+}
+
 fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
     for event in event_pump.poll_iter() {
         match event {
-            Event::Quit {..} |
-            Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+            Event::Quit {..} => {
                 return false;
             }
-            Event::KeyUp { keycode: Some(Keycode::R), .. } => {
+            Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                 cpu.reset();
+            }
+            Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
+                if keycode == Keycode::LShift || keycode == Keycode::RShift {
+                    continue;
+                }
+
+                let mut ascii = keycode as u8;
+                if ascii >= b'a' && ascii <= b'z' {
+                    ascii -= 32;
+                }
+
+                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) {
+                    ascii = match ascii {
+                        b'1' => b'!',
+                        b'2' => b'@',
+                        b'3' => b'#',
+                        b'4' => b'$',
+                        b'5' => b'%',
+                        b'6' => b'^',
+                        b'7' => b'&',
+                        b'8' => b'*',
+                        b'9' => b'(',
+                        b'0' => b')',
+
+                        b'-' => b'_',
+                        b'=' => b'+',
+
+                        b'[' => b'{',
+                        b']' => b'}',
+                        b';' => b':',
+                        b'\'' => b'"',
+                        b',' => b'<',
+                        b'.' => b'>',
+                        b'/' => b'?',
+                        _ => ascii
+                    };
+                }
+
+                cpu.ram[INPUT_DATA_ADDR] = ascii | (1 << 7);
             }
             _ => {}
         }
@@ -189,6 +241,8 @@ fn main() {
             thread::sleep(Duration::from_millis(16));
         }
 
+        cpu.clear_cycles();
         cpu_cycles += cpu.tick() as u32;
+        handle_soft_sw(&mut cpu);
     }
 }
