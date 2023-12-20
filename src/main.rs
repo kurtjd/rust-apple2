@@ -221,7 +221,7 @@ fn main() {
 
 
     // Initialize CPU
-    let mut cpu = Cpu6502::new();
+    let mut cpu = Cpu6502::new(0xC000);
     load_rom(&mut cpu);
     cpu.reset();
 
