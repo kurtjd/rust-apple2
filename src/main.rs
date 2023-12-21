@@ -61,17 +61,25 @@ fn print_character(val: u8, cell_idx: usize, gfx_helper: &mut GfxHelper) {
     let col = cell_idx % TEXT_COLS;
 
     // Mask off the upper two bits as they don't affect address
+    // Then multiply by 8 (since each character is represented by 8 bytes)
     let char_addr = ((val & 0x3F) as u32 * CHAR_HEIGHT) as usize;
+
+    // Convert row and col into an index into the 1D pixel buffer
     let mut pbuf_idx = row * (CHAR_HEIGHT * WIN_WIDTH * PIXEL_SIZE) as usize + col * (CHAR_WIDTH * PIXEL_SIZE) as usize;
 
+    // For every byte (row) in character map
     for i in char_addr..char_addr + CHAR_HEIGHT as usize {
         let mut char_map = gfx_helper.char_data[i];
+
+        // If MSB is low in ASCII value, invert colors
         if val & (1 << 7) == 0 {
             char_map ^= 0xFF; // Invert all bits
         }
-        char_map <<= 1;
+        char_map <<= 1; // Then shift off high bit because we don't need it
 
+        // For every dot in row of character map
         for _ in 0..CHAR_WIDTH {
+            // Draw the correct color depending on if bit is high or not
             if char_map & (1 << 7) != 0 {
                 gfx_helper.pixel_buf[pbuf_idx..pbuf_idx + PIXEL_SIZE as usize].fill(PIXEL_ON_COLOR);
             } else {
@@ -82,6 +90,7 @@ fn print_character(val: u8, cell_idx: usize, gfx_helper: &mut GfxHelper) {
             pbuf_idx += PIXEL_SIZE as usize;
         }
 
+        // Set pixel buffer index to next character row down
         pbuf_idx -= (CHAR_WIDTH * PIXEL_SIZE) as usize;
         pbuf_idx += (WIN_WIDTH * PIXEL_SIZE) as usize;
     }
@@ -131,6 +140,14 @@ fn handle_soft_sw(cpu: &mut Cpu6502) {
     }
 }
 
+fn is_valid_key(ascii: u8) -> bool {
+    // 8 = ASCII for backspace, 13 = ASCII for return/enter
+    match ascii {
+        b' '..=b']' | b'_' | 8 | 13 => true,
+        _ => false
+    }
+}
+
 fn get_shift_ascii(ascii: u8) -> u8 {
     match ascii {
         b'1' => b'!',
@@ -156,6 +173,14 @@ fn get_shift_ascii(ascii: u8) -> u8 {
     }
 }
 
+fn get_ctrl_ascii(ascii: u8) -> u8 {
+    // Ctrl only modified A-Z keys by clearing the 6th bit
+    match ascii >= b'A' && ascii <= b'Z' {
+        true => ascii & !(1 << 6),
+        false => ascii
+    }
+}
+
 fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
     for event in event_pump.poll_iter() {
         match event {
@@ -166,7 +191,12 @@ fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
                 cpu.reset();
             }
             Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
-                if keycode == Keycode::LShift || keycode == Keycode::RShift {
+                // Special case for arrow keys because they don't have an ASCII code
+                if keycode == Keycode::Right {
+                    cpu.ram[INPUT_DATA_ADDR] = 0x95;
+                    continue;
+                } else if keycode == Keycode::Left {
+                    cpu.ram[INPUT_DATA_ADDR] = 0x88;
                     continue;
                 }
 
@@ -179,6 +209,16 @@ fn handle_input(cpu: &mut Cpu6502, event_pump: &mut EventPump) -> bool {
                 // Get the proper ASCII character if shift held
                 if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) {
                     ascii = get_shift_ascii(ascii);
+                }
+
+                // Do nothing if not a valid Apple 2 key
+                if !is_valid_key(ascii) {
+                    continue;
+                }
+
+                // Modify the value (if necessary) when CTRL is held
+                if keymod.contains(Mod::LCTRLMOD) || keymod.contains(Mod::RCTRLMOD) {
+                    ascii = get_ctrl_ascii(ascii);
                 }
 
                 // The Apple 2 has the high bit set for ASCII characters
@@ -257,7 +297,6 @@ fn main() {
             thread::sleep(Duration::from_millis(16));
         }
 
-        cpu.clear_cycles();
         cpu_cycles += cpu.tick() as u32;
         handle_soft_sw(&mut cpu);
     }

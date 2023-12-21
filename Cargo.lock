@@ -257,7 +257,7 @@ dependencies = [
 [[package]]
 name = "rust-6502"
 version = "0.1.0"
-source = "git+https://github.com/kurtjd/rust-6502.git?branch=main#51cdb91dc829ce792a475bb7917ba4f7fd465c89"
+source = "git+https://github.com/kurtjd/rust-6502.git?branch=main#c91cb148de5e68cb0a8a9d3c2caa7edd913fd05c"
 dependencies = [
  "bitflags 2.4.1",
  "rstest",
