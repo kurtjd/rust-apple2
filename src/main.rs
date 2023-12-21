@@ -3,9 +3,9 @@
 use rust_6502::*;
 
 use std::{fs::File, io::Read};
-use std::thread;
-use std::time::Duration;
+use std::time::{Instant, Duration};
 
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::{EventPump, video::Window, render::Canvas, render::Texture};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::event::Event;
@@ -47,6 +47,49 @@ const CHAR_WIDTH: u32 = 7;
 const CHAR_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
 const PERIPH_ROM_SZ: usize = 0x100;
+const DISP_SCALE: u32 = 3;
+
+
+const BUF_SZ: usize = 20000;
+
+struct SquareWave {
+    buffer: [f32; BUF_SZ],
+    sample_idx: usize,
+    buf_idx: usize
+}
+
+impl SquareWave {
+    fn insert_sample(&mut self, sample: f32) {
+        self.buffer[self.buf_idx] = sample;
+
+        self.buf_idx += 1;
+        if self.buf_idx >= BUF_SZ {
+            self.buf_idx = 0;
+        }
+    }
+}
+
+impl AudioCallback for SquareWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        for x in out.iter_mut() {
+            if self.sample_idx == self.buf_idx {
+                *x = 0.0;
+                return;
+            }
+
+            *x = self.buffer[self.sample_idx];
+
+            self.sample_idx += 1;
+            if self.sample_idx >= BUF_SZ {
+                self.sample_idx = 0;
+            }
+        }
+    }
+}
+
+
 
 struct GfxHelper<'a> {
     canvas: Canvas<Window>,
@@ -130,10 +173,11 @@ fn handle_gfx(cpu: &Cpu6502, gfx_helper: &mut GfxHelper) {
     gfx_helper.canvas.present();
 }
 
-fn handle_soft_sw(cpu: &mut Cpu6502) {
+fn handle_soft_sw(cpu: &mut Cpu6502, speaker: &mut bool) {
     for c in &mut cpu.cycles {
         match c.address {
             INPUT_CLEAR_ADDR => { cpu.ram[INPUT_DATA_ADDR] &= !(1 << 7) },
+            SPEAKER_ADDR => { *speaker = !*speaker }
             // Other addresses
             _ => {}
         }
@@ -143,7 +187,7 @@ fn handle_soft_sw(cpu: &mut Cpu6502) {
 fn is_valid_key(ascii: u8) -> bool {
     // 8 = ASCII for backspace, 13 = ASCII for return/enter
     match ascii {
-        b' '..=b']' | b'_' | 8 | 13 => true,
+        b' '..=b'^' | b'_' | 8 | 13 => true,
         _ => false
     }
 }
@@ -254,7 +298,7 @@ fn main() {
     let video_subsystem = sdl_context.video().unwrap();
 
     // Create a window
-    let window = video_subsystem.window("Apple ][", WIN_WIDTH, WIN_HEIGHT)
+    let window = video_subsystem.window("Apple ][", WIN_WIDTH * DISP_SCALE, WIN_HEIGHT * DISP_SCALE)
         .position_centered()
         .build()
         .unwrap();
@@ -274,30 +318,69 @@ fn main() {
         pixel_surface: texture,
         char_data: load_char_set()
     };
+    
+    let audio_subsystem = sdl_context.audio().unwrap();
 
+    let audio_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),  // mono
+        samples: None       // default sample size
+    };
+
+    let wave = SquareWave {
+        buffer: [0.0; BUF_SZ],
+        sample_idx: 0,
+        buf_idx: 0
+    };
+
+    let mut audio_device = audio_subsystem.open_playback(None, &audio_spec, |_| { wave }).unwrap();
+    audio_device.resume();
 
     // Initialize CPU and load firmware/ROMs
     let mut cpu = Cpu6502::new(ROM_START_ADDR);
     load_rom(&mut cpu);
     cpu.reset();
 
-    // Framerate limiting hack for now (~60Hz)
-    // Apple II CPU freq: 1.24 MHz
-    // Apple II cycles per frame: ~17,066
-    // Miliseconds per frame: ~16
-    let mut cpu_cycles: u32 = 0;
-    loop {
-        if cpu_cycles >= 17066 {
-            handle_gfx(&cpu, &mut gfx_helper);
-            if !handle_input(&mut cpu, &mut gfx_helper.event_pump) {
-                break;
-            }
+    // Video Framerate: ~60Hz
+    // Apple II CPU freq: ~1024 kHz
+    // Apple II CPU cycles per frame: ~17,066.67
+    // Miliseconds per frame: ~16.667
+    // Speaker sample rate: ~44.1 kHz
+    // Apple II CPU cycles per sample: ~23
+    // Samples per frame: 735
+    // Microseconds per sample: ~22.6
+    let mut frame_cycles: u32 = 0;
+    let mut speaker = false;
+    let mut spk_cycles: u32 = 0;
 
-            cpu_cycles = 0;
-            thread::sleep(Duration::from_millis(16));
+    loop {
+        handle_gfx(&cpu, &mut gfx_helper);
+        if !handle_input(&mut cpu, &mut gfx_helper.event_pump) {
+            break;
         }
 
-        cpu_cycles += cpu.tick() as u32;
-        handle_soft_sw(&mut cpu);
+        let start_time = Instant::now();
+        while frame_cycles < 17067 {
+            let cycles = cpu.tick() as u32;
+            frame_cycles += cycles;
+            spk_cycles += cycles;
+
+            if spk_cycles >= 23 {
+                let mut lock = audio_device.lock();
+                lock.insert_sample(match speaker {
+                    true => 0.5,
+                    false => 0.0
+                });
+                spk_cycles = 0;
+            }
+
+            handle_soft_sw(&mut cpu, &mut speaker);
+        }
+        frame_cycles = 0;
+
+        let elapsed = start_time.elapsed().as_micros() as u64;
+        let duration = Duration::from_micros(16667) - Duration::from_micros(elapsed);
+        
+        std::thread::sleep(duration);
     }
 }
