@@ -50,7 +50,7 @@ const PERIPH_ROM_SZ: usize = 0x100;
 const DISP_SCALE: u32 = 3;
 
 
-const BUF_SZ: usize = 20000;
+const BUF_SZ: usize = 1024;
 
 struct SquareWave {
     buffer: [f32; BUF_SZ],
@@ -323,8 +323,8 @@ fn main() {
 
     let audio_spec = AudioSpecDesired {
         freq: Some(44100),
-        channels: Some(1),  // mono
-        samples: None       // default sample size
+        channels: Some(1),
+        samples: Some(512)
     };
 
     let wave = SquareWave {
