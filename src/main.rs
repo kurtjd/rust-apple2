@@ -1,9 +1,11 @@
 mod apple2;
 use apple2::Apple2;
+mod sound;
+use sound::SoundHandler;
 
 use std::{fs::File, io::Read};
 use std::time::{Instant, Duration};
-use sdl2::audio::{AudioCallback, AudioSpecDesired};
+
 use sdl2::{EventPump, video::Window, render::Canvas, render::Texture};
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::event::Event;
@@ -21,45 +23,6 @@ const CHAR_WIDTH: u32 = 7;
 const CHAR_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
 const DISP_SCALE: u32 = 3;
-
-const BUF_SZ: usize = 1024;
-
-struct SquareWave {
-    buffer: [f32; BUF_SZ],
-    sample_idx: usize,
-    buf_idx: usize
-}
-
-impl SquareWave {
-    fn insert_sample(&mut self, sample: f32) {
-        self.buffer[self.buf_idx] = sample;
-
-        self.buf_idx += 1;
-        if self.buf_idx >= BUF_SZ {
-            self.buf_idx = 0;
-        }
-    }
-}
-
-impl AudioCallback for SquareWave {
-    type Channel = f32;
-
-    fn callback(&mut self, out: &mut [f32]) {
-        for x in out.iter_mut() {
-            if self.sample_idx == self.buf_idx {
-                *x = 0.0;
-                return;
-            }
-
-            *x = self.buffer[self.sample_idx];
-
-            self.sample_idx += 1;
-            if self.sample_idx >= BUF_SZ {
-                self.sample_idx = 0;
-            }
-        }
-    }
-}
 
 struct GfxHelper<'a> {
     canvas: Canvas<Window>,
@@ -226,23 +189,9 @@ fn main() {
         pixel_surface: texture,
         char_data: load_char_set()
     };
-    
-    let audio_subsystem = sdl_context.audio().unwrap();
 
-    let audio_spec = AudioSpecDesired {
-        freq: Some(44100),
-        channels: Some(1),
-        samples: Some(512)
-    };
-
-    let wave = SquareWave {
-        buffer: [0.0; BUF_SZ],
-        sample_idx: 0,
-        buf_idx: 0
-    };
-
-    let mut audio_device = audio_subsystem.open_playback(None, &audio_spec, |_| { wave }).unwrap();
-    audio_device.resume();
+    let mut sound_handler = SoundHandler::new(&sdl_context);
+    sound_handler.device.resume();
 
     let mut apple2 = Apple2::new();
     apple2.init();
@@ -257,7 +206,8 @@ fn main() {
 
         let speaker_samples = apple2.run_frame(60, 44100);
         {
-            let mut lock = audio_device.lock();
+            //let mut lock = audio_device.lock();
+            let mut lock = sound_handler.device.lock();
             for s in speaker_samples {
                 lock.insert_sample(match s {
                     true => 0.5,
