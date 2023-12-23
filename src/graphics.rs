@@ -39,6 +39,14 @@ impl <'a> GraphicsHandler <'a> {
         char_array
     }
 
+    fn handle_flash(&mut self, frame_rate: u32) {
+        self.frame_count += 1;
+        if self.frame_count >= frame_rate / FLASH_RATE {
+            self.invert_text = !self.invert_text;
+            self.frame_count = 0;
+        }
+    }
+
     fn print_character(&mut self, val: u8, cell_idx: usize) {
         let row = cell_idx / TEXT_COLS;
         let col = cell_idx % TEXT_COLS;
@@ -120,12 +128,8 @@ impl <'a> GraphicsHandler <'a> {
         self.canvas.copy(&self.pixel_surface, None, None).unwrap();
         self.canvas.present();
 
-        // Keep track when to "flash"
-        self.frame_count += 1;
-        if self.frame_count >= frame_rate / FLASH_RATE {
-            self.invert_text = !self.invert_text;
-            self.frame_count = 0;
-        }
+        // Keep track when to "flash" text
+        self.handle_flash(frame_rate);
     }
 
     pub fn new(
