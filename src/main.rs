@@ -11,6 +11,11 @@ use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 
+const FRAME_RATE: u32 = 60;
+const US_PER_FRAME: u64 = 1000000 / FRAME_RATE as u64;
+const SAMPLE_RATE: u32 = 44100;
+const SAMPLE_VOLUME: f32 = 0.5;
+
 
 fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
     for event in event_pump.poll_iter() {
@@ -24,10 +29,10 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
             Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
                 // Special case for arrow keys because they don't have an ASCII code
                 if keycode == Keycode::Right {
-                    apple2.input_char(0x95);
+                    apple2.input_char(apple2::KEY_RIGHT);
                     continue;
                 } else if keycode == Keycode::Left {
-                    apple2.input_char(0x88);
+                    apple2.input_char(apple2::KEY_LEFT);
                     continue;
                 }
 
@@ -85,26 +90,26 @@ fn main() {
     sound_handler.device.resume();
 
     loop {
-        graphics_handler.handle_gfx(&apple2.cpu.ram);
+        graphics_handler.handle_gfx(FRAME_RATE, &apple2.cpu.ram);
         if !handle_input(&mut apple2, &mut event_pump) {
             break;
         }
 
         let start_time = Instant::now();
 
-        let speaker_samples = apple2.run_frame(60, 44100);
+        let speaker_samples = apple2.run_frame(FRAME_RATE, SAMPLE_RATE);
         {
             let mut lock = sound_handler.device.lock();
             for s in speaker_samples {
                 lock.insert_sample(match s {
-                    true => 0.5,
+                    true => SAMPLE_VOLUME,
                     false => 0.0
                 });
             }
         }
 
         let elapsed = start_time.elapsed().as_micros() as u64;
-        let duration = Duration::from_micros(16667) - Duration::from_micros(elapsed);
+        let duration = Duration::from_micros(US_PER_FRAME) - Duration::from_micros(elapsed);
         std::thread::sleep(duration);
     }
 }

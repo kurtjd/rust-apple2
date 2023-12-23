@@ -42,6 +42,9 @@ pub struct Apple2 {
     speaker: bool
 }
 
+pub const KEY_RIGHT: u8 = 0x95;
+pub const KEY_LEFT: u8 = 0x88;
+
 impl Apple2 {
     fn load_rom(&mut self) {
         // Firmware ROM
