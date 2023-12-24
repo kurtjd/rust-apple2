@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use rust_6502::*;
+use crate::disk_controller::DiskController;
 use std::{fs::File, io::Read};
 
 mod settings {
@@ -16,8 +17,11 @@ mod address {
 }
 
 mod soft_switch {
+    // Input
     pub const INPUT_CLEAR: usize = 0xC010; // Whole page
     pub const SPEAKER: usize = 0xC030; // Whole page
+
+    // Graphics
     pub const GFX_MODE: usize = 0xC050;
     pub const TXT_MODE: usize = 0xC051;
     pub const SINGLE_MODE: usize = 0xC052;
@@ -39,7 +43,8 @@ pub struct Apple2 {
     gfx_mode: GfxMode,
     gfx_mixed_mode: bool,
     gfx_use_pg2: bool,
-    speaker: bool
+    speaker: bool,
+    disk_controller: DiskController
 }
 
 pub const KEY_RIGHT: u8 = 0x95;
@@ -99,7 +104,7 @@ impl Apple2 {
                 soft_switch::HIRES_MODE => {
 
                 },
-                _ => {}
+                _ => self.disk_controller.handle_soft_sw(c.address)
             }
         }
     }
@@ -110,7 +115,8 @@ impl Apple2 {
             gfx_mode: GfxMode::TEXT,
             gfx_mixed_mode: false,
             gfx_use_pg2: false,
-            speaker: false
+            speaker: false,
+            disk_controller: DiskController::new(0x60)
         }
     }
 

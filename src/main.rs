@@ -1,8 +1,10 @@
+mod disk_controller;
 mod apple2;
-use apple2::Apple2;
 mod sound;
-use sound::SoundHandler;
 mod graphics;
+
+use apple2::Apple2;
+use sound::SoundHandler;
 use graphics::GraphicsHandler;
 
 use std::time::{Instant, Duration};
@@ -83,7 +85,7 @@ fn main() {
         graphics::WIN_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
-    let mut graphics_handler: GraphicsHandler = GraphicsHandler::new(&mut canvas, &texture_creator);
+    let mut graphics_handler = GraphicsHandler::new(&mut canvas, &texture_creator);
 
     // Initialize audio
     let mut sound_handler = SoundHandler::new(&sdl_context);
