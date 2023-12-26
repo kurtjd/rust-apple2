@@ -58,7 +58,7 @@ impl Apple2 {
         // Firmware ROM
         let mut fw_rom = File::open(
             "roms/firmware/Apple2_Plus.rom"
-        ).expect("Failed to opem firmware ROM!");
+        ).expect("Failed to open firmware ROM!");
 
         fw_rom.read_exact(
             &mut self.cpu.ram[address::FW_START..]
@@ -109,15 +109,8 @@ impl Apple2 {
                 },
                 _ => {
                     self.disk_controller.handle_soft_sw(c.address, &mut self.cpu.ram)
-                    // Figure out how give disk controller mutable access to memory
                 }
             }
-        }
-    }
-
-    fn copy_disk_controller_reg(&mut self) {
-        for i in (0..=0xE).step_by(2) {
-            self.cpu.ram[address::PERIPH_IO + settings::DISK_SLOT + i] = self.disk_controller.data_reg;
         }
     }
 
@@ -157,11 +150,9 @@ impl Apple2 {
             }
 
             self.handle_soft_sw();
-            
-            // Want to move all this handling to the disk controller module
-            self.copy_disk_controller_reg();
         }
 
+        self.disk_controller.handle_motor_off_delay();
         speaker_samples
     }
 
