@@ -11,20 +11,18 @@ const MAX_TRACKS: usize = 35;
 const WOZ_SIG: u32 = 0x325A4F57; // WOZ2
 const TRACKS_START_ADDR: usize = 0x600;
 
-pub mod chunk {
+mod chunk {
     pub const INFO: u32 = 0x4F464E49;
     pub const TMAP: u32 = 0x50414D54;
     pub const TRKS: u32 = 0x534B5254;
 }
 
 pub struct WozTrack {
-    pub block_count: u16,
     pub bit_count: u32,
     pub data: Vec<u8>
 }
 
 pub struct WozImage {
-    pub crc: u32,
     pub write_protected: bool,
     pub tracks: Vec<WozTrack>
 }
@@ -39,14 +37,13 @@ fn get_bytes_2(buf: &[u8], start: usize) -> u16 {
 }
 
 impl WozImage {
-    fn verify(file_buf: &[u8]) -> Result<u32, &'static str> {
+    fn verify(file_buf: &[u8]) -> Result<(), &'static str> {
         let signature = get_bytes_4(file_buf, 0);
         let high_bits = file_buf[4];
         let lfcr = get_bytes_4(file_buf, 5) & 0x00FFFFFF;
 
         if signature == WOZ_SIG && high_bits == 0xFF && lfcr == 0x0A0D0A {
-            let crc = get_bytes_4(file_buf, 8);
-            Ok(crc)
+            Ok(())
         } else {
             Err("File is not a WOZ2 disk image.")
         }
@@ -97,7 +94,6 @@ impl WozImage {
         for i in 0..MAX_TRACKS {
             let offset = buf_pntr + (i * 8);
             let block_addr = get_bytes_2(file_buf, offset) as usize * 512;
-            let block_count = get_bytes_2(file_buf, offset + 2);
             let bit_count = get_bytes_4(file_buf, offset + 4);
             let byte_count = (bit_count as f32 / 8.0).ceil() as usize;
             let mut data: Vec<u8> = Vec::new();
@@ -107,7 +103,6 @@ impl WozImage {
             }
 
             tracks.push(WozTrack {
-                block_count,
                 bit_count,
                 data
             });
@@ -119,12 +114,12 @@ impl WozImage {
         let mut image = File::open(file_path).expect("Failed to open WOZ image!");
         image.read(&mut file_buf).expect("Failed to read WOZ image data!");
 
-        // Verify image
-        let crc = WozImage::verify(&file_buf)?;
+        WozImage::verify(&file_buf)?;
+
         let mut write_protected = false;
         let mut tracks = Vec::new();
-
         let mut buf_pntr: usize = 12;
+
         loop {
             let chunk_id = get_bytes_4(&file_buf, buf_pntr);
             let chunk_size = get_bytes_4(&file_buf, buf_pntr + 4);
@@ -150,7 +145,6 @@ impl WozImage {
 
         Ok(
             WozImage {
-                crc,
                 write_protected,
                 tracks
             }

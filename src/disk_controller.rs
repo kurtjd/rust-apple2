@@ -138,7 +138,10 @@ impl DiskController {
         if self.drives_on && !self.write_mode {
             // If in write-protect sense mode, return whether or not disk is write protected
             if self.write_sense {
-                self.data_reg = 1 << 7; // Lets just say always write protected for now
+                self.data_reg = match self.disk_image.as_ref().unwrap().write_protected {
+                    true => 1 << 7,
+                    false => 0
+                };
             } else {
                 self.get_next_byte();
             }
