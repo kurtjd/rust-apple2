@@ -1,7 +1,10 @@
-mod disk_controller;
+#![allow(dead_code)]
+
 mod apple2;
 mod sound;
 mod graphics;
+mod disk_controller;
+mod wizard_of_woz;
 
 use apple2::Apple2;
 use sound::SoundHandler;

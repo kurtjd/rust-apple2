@@ -1,7 +1,5 @@
-#![allow(dead_code)]
-
 use std::path::Path;
-use std::{fs::File, io::Read};
+use crate::wizard_of_woz::WozImage;
 
 const WOZ_IMG_SIZE: usize = 234496;
 const TRK_BUF_SIZE: usize = 220080;
@@ -47,7 +45,7 @@ pub struct DiskController {
     current_drive: u8,
     write_mode: bool,
     write_sense: bool,
-    disk_data: [u8; TRK_BUF_SIZE],
+    disk_image: Option<WozImage>,
     motor_off_delay: u8
 }
 
@@ -63,7 +61,7 @@ impl DiskController {
             current_drive: 1,
             write_mode: false,
             write_sense: false,
-            disk_data: [0; TRK_BUF_SIZE],
+            disk_image: None,
             motor_off_delay: 0
         }
     }
@@ -95,32 +93,24 @@ impl DiskController {
     }
 
     pub fn load_image(&mut self, image_path: &Path) {
-        let mut file_buf = [0; WOZ_IMG_SIZE];
-        let mut image = File::open(image_path).expect("Failed to open disk image!");
-        image.read(&mut file_buf).expect("Failed to read disk image data!");
-
-        /* For now skip all the metadata associated with .woz and make assumptions about
-        number of tracks/bytes per tracks */
-        let mut idx = 0;
-        for i in 0..=MAX_TRACK {
-            let track_start = TRACK0_ADDR + ((i as usize) * TRACK_BYTES_RESERVED);
-            for j in 0..BYTES_PER_TRACK {
-                self.disk_data[idx] = file_buf[track_start + j];
-                idx += 1;
-            }
-        }
+        self.disk_image = Some(
+            WozImage::new(image_path).unwrap()
+        );
     }
 
     fn get_next_bit(&mut self) -> u8 {
-        let track_idx = (self.half_track / 2) as usize * BYTES_PER_TRACK;
-        let byte_idx = track_idx + (self.bit_pntr / 8);
+        let track_idx = (self.half_track / 2) as usize;
+        let track = &(self.disk_image.as_ref().unwrap().tracks[track_idx]);
+        let track_data = &track.data;
+
+        let byte_idx = self.bit_pntr / 8;
         let bit_on = self.bit_pntr % 8;
-        let byte = self.disk_data[byte_idx];
+        let byte = track_data[byte_idx];
         let bit = (byte >> (7 - bit_on)) & 1;
-        
+
         // Wrap around to simulate disk spinning in circle
         self.bit_pntr += 1;
-        if self.bit_pntr >= BITS_PER_TRACK {
+        if self.bit_pntr >= track.bit_count as usize {
             self.bit_pntr = 0;
         }
 
