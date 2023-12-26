@@ -3,10 +3,12 @@
 use rust_6502::*;
 use crate::disk_controller::DiskController;
 use std::{fs::File, io::Read};
+use std::path::Path;
 
 mod settings {
     pub const CPU_CLK_SPEED: u32 = 1024000;
     pub const PERIPH_ROM_SZ: usize = 0x100;
+    pub const DISK_SLOT: usize = 0x60;
 }
 
 mod address {
@@ -14,6 +16,7 @@ mod address {
     pub const DISK2_START: usize = 0xC600;
     pub const FW_START: usize = 0xD000;
     pub const INPUT_DATA: usize = 0xC000;
+    pub const PERIPH_IO: usize = 0xC080;
 }
 
 mod soft_switch {
@@ -72,7 +75,7 @@ impl Apple2 {
     }
 
     fn handle_soft_sw(&mut self) {
-        for c in &mut self.cpu.cycles {
+        for c in &self.cpu.cycles {
             match c.address {
                 soft_switch::INPUT_CLEAR => {
                     self.cpu.ram[address::INPUT_DATA] &= !(1 << 7);
@@ -104,8 +107,17 @@ impl Apple2 {
                 soft_switch::HIRES_MODE => {
 
                 },
-                _ => self.disk_controller.handle_soft_sw(c.address)
+                _ => {
+                    self.disk_controller.handle_soft_sw(c.address, &mut self.cpu.ram)
+                    // Figure out how give disk controller mutable access to memory
+                }
             }
+        }
+    }
+
+    fn copy_disk_controller_reg(&mut self) {
+        for i in (0..=0xE).step_by(2) {
+            self.cpu.ram[address::PERIPH_IO + settings::DISK_SLOT + i] = self.disk_controller.data_reg;
         }
     }
 
@@ -116,13 +128,14 @@ impl Apple2 {
             gfx_mixed_mode: false,
             gfx_use_pg2: false,
             speaker: false,
-            disk_controller: DiskController::new(0x60)
+            disk_controller: DiskController::new(settings::DISK_SLOT)
         }
     }
 
     pub fn init(&mut self) {
         self.load_rom();
         self.cpu.reset();
+        self.disk_controller.load_image(Path::new("roms/disks/DOS_33.woz"));
     }
 
     pub fn run_frame(&mut self, frame_rate: u32, sample_rate: u32) -> Vec<bool> {
@@ -144,6 +157,9 @@ impl Apple2 {
             }
 
             self.handle_soft_sw();
+            
+            // Want to move all this handling to the disk controller module
+            self.copy_disk_controller_reg();
         }
 
         speaker_samples

@@ -110,8 +110,12 @@ fn main() {
             }
         }
 
-        let elapsed = start_time.elapsed().as_micros() as u64;
-        let duration = Duration::from_micros(US_PER_FRAME) - Duration::from_micros(elapsed);
-        std::thread::sleep(duration);
+        let elapsed = Duration::from_micros(start_time.elapsed().as_micros() as u64);
+        let frame = Duration::from_micros(US_PER_FRAME);
+
+        if frame > elapsed {
+            let duration = frame - elapsed;
+            std::thread::sleep(duration);
+        }
     }
 }
