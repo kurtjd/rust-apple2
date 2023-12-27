@@ -31,7 +31,7 @@ pub struct GraphicsHandler<'a> {
 impl <'a> GraphicsHandler <'a> {
     fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
         let mut char_rom = File::open(
-            "roms/firmware/Character_Set.rom"
+            "roms/firmware/char_set.rom"
         ).expect("Failed to open charset ROM!");
 
         let mut char_array: [u8; CHAR_ROM_SIZE] = [0; CHAR_ROM_SIZE];

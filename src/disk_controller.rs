@@ -1,17 +1,7 @@
 use std::path::Path;
 use crate::wizard_of_woz::WozImage;
 
-const WOZ_IMG_SIZE: usize = 234496;
-const TRK_BUF_SIZE: usize = 220080;
-
 const MAX_TRACK: u8 = 34;
-const TRACK0_ADDR: usize = 0x600;
-const BLOCK_SIZE: usize = 512;
-const BLOCKS_PER_TRACK: usize = 13;
-const TRACK_BYTES_RESERVED: usize = BLOCKS_PER_TRACK * BLOCK_SIZE;
-const BITS_PER_TRACK: usize = 50304;
-const BYTES_PER_TRACK: usize = BITS_PER_TRACK / 8;
-
 const PERIPH_IO_ADDR: usize = 0xC080;
 
 mod soft_switch {
@@ -66,88 +56,10 @@ impl DiskController {
         }
     }
 
-    fn phase_on(&mut self, phase: u8) {
-        if self.drives_on {
-            self.next_phase = phase;
-        }
-    }
-
-    fn phase_off(&mut self, phase: u8) {
-        if !self.drives_on {
-            return;
-        }
-
-        // If phases turned off in descending order, track increases
-        if (self.next_phase > phase || (self.next_phase == 0 && phase == 3)) &&
-            self.half_track < MAX_TRACK * 2
-        {
-            self.half_track += 1;
-        }
-
-        // Likewise if phases turned off in ascending order, track decreases
-        else if (self.next_phase < phase || (self.next_phase == 3 && phase == 0)) &&
-                self.half_track > 0
-        {
-            self.half_track -= 1;
-        }
-    }
-
     pub fn load_image(&mut self, image_path: &Path) {
         self.disk_image = Some(
             WozImage::new(image_path).unwrap()
         );
-    }
-
-    fn get_next_bit(&mut self) -> u8 {
-        let track_idx = (self.half_track / 2) as usize;
-        let track = &(self.disk_image.as_ref().unwrap().tracks[track_idx]);
-        let track_data = &track.data;
-
-        let byte_idx = self.bit_pntr / 8;
-        let bit_on = self.bit_pntr % 8;
-        let byte = track_data[byte_idx];
-        let bit = (byte >> (7 - bit_on)) & 1;
-
-        // Wrap around to simulate disk spinning in circle
-        self.bit_pntr += 1;
-        if self.bit_pntr >= track.bit_count as usize {
-            self.bit_pntr = 0;
-        }
-
-        bit
-    }
-
-    fn get_next_byte(&mut self) {
-        let mut bit = self.get_next_bit();
-        
-        /* If we receive a 0, we are in the middle of a 10-bit self-sync byte so keep reading
-        until at the beginning of a valid disk byte */
-        while bit == 0 {
-            bit = self.get_next_bit();
-        }
-
-        // Once found the beginning of valid byte, shift in the next 7 bits
-        self.data_reg = 1;
-        for _ in 0..7 {
-            self.data_reg <<= 1;
-            self.data_reg |= self.get_next_bit();
-        }
-    }
-
-    fn load_byte(&mut self, address: usize, ram: &mut[u8]) {
-        if self.drives_on && !self.write_mode {
-            // If in write-protect sense mode, return whether or not disk is write protected
-            if self.write_sense {
-                self.data_reg = match self.disk_image.as_ref().unwrap().write_protected {
-                    true => 1 << 7,
-                    false => 0
-                };
-            } else {
-                self.get_next_byte();
-            }
-        }
-
-        ram[address] = self.data_reg;
     }
 
     pub fn handle_motor_off_delay(&mut self) {
@@ -163,7 +75,7 @@ impl DiskController {
     }
 
     pub fn handle_soft_sw(&mut self, address: usize, ram: &mut[u8]) {
-        if address < PERIPH_IO_ADDR {
+        if self.disk_image.is_none() || address < PERIPH_IO_ADDR {
             return;
         }
 
@@ -244,5 +156,79 @@ impl DiskController {
             },
             _ => {}
         }
+    }
+
+    fn phase_on(&mut self, phase: u8) {
+        if self.drives_on {
+            self.next_phase = phase;
+        }
+    }
+
+    fn phase_off(&mut self, phase: u8) {
+        if !self.drives_on {
+            return;
+        }
+
+        // If phases turned off in descending order, track increases
+        if (self.next_phase > phase || (self.next_phase == 0 && phase == 3)) &&
+            self.half_track < MAX_TRACK * 2
+        {
+            self.half_track += 1;
+        }
+
+        // Likewise if phases turned off in ascending order, track decreases
+        else if (self.next_phase < phase || (self.next_phase == 3 && phase == 0)) &&
+                self.half_track > 0
+        {
+            self.half_track -= 1;
+        }
+    }
+
+    fn get_next_bit(&mut self) -> u8 {
+        let track_idx = (self.half_track / 2) as usize;
+        let track = &(self.disk_image.as_ref().unwrap().tracks[track_idx]);
+        let track_data = &track.data;
+
+        let byte_idx = self.bit_pntr / 8;
+        let bit_on = self.bit_pntr % 8;
+        let byte = track_data[byte_idx];
+        let bit = (byte >> (7 - bit_on)) & 1;
+
+        // Wrap around to simulate disk spinning in circle
+        self.bit_pntr += 1;
+        self.bit_pntr %= track.bit_count as usize;
+        bit
+    }
+
+    fn get_next_byte(&mut self) {
+        /* If we receive a 0, we are in the middle of a 10-bit self-sync byte so keep reading
+        until at the beginning of a valid disk byte */
+        let mut bit = self.get_next_bit();
+        while bit == 0 {
+            bit = self.get_next_bit();
+        }
+
+        // Once found the beginning of valid byte, shift in the next 7 bits
+        self.data_reg = 1;
+        for _ in 0..7 {
+            self.data_reg <<= 1;
+            self.data_reg |= self.get_next_bit();
+        }
+    }
+
+    fn load_byte(&mut self, address: usize, ram: &mut[u8]) {
+        if self.drives_on && !self.write_mode {
+            // If in write-protect sense mode, return whether or not disk is write protected
+            if self.write_sense {
+                self.data_reg = match self.disk_image.as_ref().unwrap().write_protected {
+                    true => 1 << 7,
+                    false => 0
+                };
+            } else {
+                self.get_next_byte();
+            }
+        }
+
+        ram[address] = self.data_reg;
     }
 }

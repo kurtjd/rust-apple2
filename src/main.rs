@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod apple2;
 mod sound;
 mod graphics;
@@ -74,8 +72,15 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    // Initialize Apple 2 emulator and insert disks
     let mut apple2 = Apple2::new();
     apple2.init();
+
+    if args.len() > 1 {
+        apple2.insert_disk(&args[1]);
+    }
 
     // Initialize SDL
     let sdl_context = sdl2::init().unwrap();
@@ -84,7 +89,7 @@ fn main() {
     // Initialize video
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window(
-        "Apple ][",
+        "Apple ][+",
         graphics::WIN_WIDTH * graphics::DISP_SCALE,
         graphics::WIN_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
@@ -95,6 +100,7 @@ fn main() {
     let mut sound_handler = SoundHandler::new(&sdl_context);
     sound_handler.device.resume();
 
+    // Main loop
     loop {
         graphics_handler.handle_gfx(FRAME_RATE, &apple2.cpu.ram);
         if !handle_input(&mut apple2, &mut event_pump) {
@@ -103,6 +109,7 @@ fn main() {
 
         let start_time = Instant::now();
 
+        // Feed sound samples from this frame to the sound handler
         let speaker_samples = apple2.run_frame(FRAME_RATE, SAMPLE_RATE);
         {
             let mut lock = sound_handler.device.lock();
@@ -114,9 +121,9 @@ fn main() {
             }
         }
 
+        // Sleep for rest of frame period
         let elapsed = Duration::from_micros(start_time.elapsed().as_micros() as u64);
         let frame = Duration::from_micros(US_PER_FRAME);
-
         if frame > elapsed {
             let duration = frame - elapsed;
             std::thread::sleep(duration);

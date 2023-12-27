@@ -11,10 +11,9 @@ use crate::dsk2woz;
 const WOZ_IMG_SIZE: usize = 250000;
 
 const MAX_TRACKS: usize = 35;
-const WOZ_SIG: u32 = 0x325A4F57; // WOZ2
-const TRACKS_START_ADDR: usize = 0x600;
 
-mod chunk {
+mod section_id {
+    pub const WOZ2: u32 = 0x325A4F57;
     pub const INFO: u32 = 0x4F464E49;
     pub const TMAP: u32 = 0x50414D54;
     pub const TRKS: u32 = 0x534B5254;
@@ -45,7 +44,7 @@ impl WozImage {
         let high_bits = file_buf[4];
         let lfcr = get_bytes_4(file_buf, 5) & 0x00FFFFFF;
 
-        if signature == WOZ_SIG && high_bits == 0xFF && lfcr == 0x0A0D0A {
+        if signature == section_id::WOZ2 && high_bits == 0xFF && lfcr == 0x0A0D0A {
             Ok(())
         } else {
             Err("File is not a WOZ2 disk image.")
@@ -135,13 +134,13 @@ impl WozImage {
             buf_pntr += 8;
 
             match chunk_id {
-                chunk::INFO => {
+                section_id::INFO => {
                     write_protected = WozImage::parse_info(&file_buf, buf_pntr)?;
                 },
-                chunk::TMAP => {
+                section_id::TMAP => {
                     WozImage::verify_track_map(&file_buf, buf_pntr)?;
                 },
-                chunk::TRKS => {
+                section_id::TRKS => {
                     WozImage::parse_tracks(&file_buf, buf_pntr, &mut tracks);
                 },
                 _ => {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rust_6502::*;
 use crate::disk_controller::DiskController;
 use std::{fs::File, io::Read};
@@ -14,7 +16,6 @@ mod address {
     pub const DISK2_START: usize = 0xC600;
     pub const FW_START: usize = 0xD000;
     pub const INPUT_DATA: usize = 0xC000;
-    pub const PERIPH_IO: usize = 0xC080;
 }
 
 mod soft_switch {
@@ -55,7 +56,7 @@ impl Apple2 {
     fn load_rom(&mut self) {
         // Firmware ROM
         let mut fw_rom = File::open(
-            "roms/firmware/Apple2_Plus.rom"
+            "roms/firmware/apple2_plus.rom"
         ).expect("Failed to open firmware ROM!");
 
         fw_rom.read_exact(
@@ -64,7 +65,7 @@ impl Apple2 {
 
         // Disk II ROM
         let mut disc_rom = File::open(
-            "roms/firmware/Disk2.rom"
+            "roms/firmware/disk2.rom"
         ).expect("Failed to open Disk II ROM!");
 
         disc_rom.read_exact(
@@ -126,8 +127,11 @@ impl Apple2 {
     pub fn init(&mut self) {
         self.load_rom();
         self.cpu.reset();
-        self.disk_controller.load_image(Path::new("roms/disks/Zork.dsk"));
     }
+
+    pub fn insert_disk(&mut self, file_path: &String) {
+        self.disk_controller.load_image(Path::new(file_path));
+    } 
 
     pub fn run_frame(&mut self, frame_rate: u32, sample_rate: u32) -> Vec<bool> {
         let mut frame_cycles = 0;
