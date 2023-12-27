@@ -126,7 +126,7 @@ impl Apple2 {
     pub fn init(&mut self) {
         self.load_rom();
         self.cpu.reset();
-        self.disk_controller.load_image(Path::new("roms/disks/Zork.woz"));
+        self.disk_controller.load_image(Path::new("roms/disks/Zork.dsk"));
     }
 
     pub fn run_frame(&mut self, frame_rate: u32, sample_rate: u32) -> Vec<bool> {

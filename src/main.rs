@@ -5,6 +5,7 @@ mod sound;
 mod graphics;
 mod disk_controller;
 mod wizard_of_woz;
+mod dsk2woz;
 
 use apple2::Apple2;
 use sound::SoundHandler;

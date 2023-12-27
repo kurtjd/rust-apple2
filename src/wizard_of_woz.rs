@@ -6,7 +6,10 @@ Reference: https://applesaucefdc.com/woz/reference2
 use std::path::Path;
 use std::{fs::File, io::Read};
 
-const MAX_IMG_SIZE: usize = 300000;
+use crate::dsk2woz;
+
+const WOZ_IMG_SIZE: usize = 250000;
+
 const MAX_TRACKS: usize = 35;
 const WOZ_SIG: u32 = 0x325A4F57; // WOZ2
 const TRACKS_START_ADDR: usize = 0x600;
@@ -81,6 +84,7 @@ impl WozImage {
             }
             
             if i % 4 == 0 && map != (i / 4) as u8 {
+                println!("Map: {map}, {}", i / 4);
                 return Err("This WOZ image uses unsupported track mapping.");
             } else if i % 2 == 0 && i % 4 != 0 && map != 0xFF {
                 return Err("This WOZ image utilizes odd tracks which is not supported.");
@@ -110,9 +114,14 @@ impl WozImage {
     }
 
     pub fn new(file_path: &Path) -> Result<Self, &'static str> {
-        let mut file_buf = [0; MAX_IMG_SIZE];
-        let mut image = File::open(file_path).expect("Failed to open WOZ image!");
-        image.read(&mut file_buf).expect("Failed to read WOZ image data!");
+        let mut file_buf = [0; WOZ_IMG_SIZE];
+
+        if file_path.extension().unwrap().to_str().unwrap() == "woz" {
+            let mut image = File::open(file_path).expect("Failed to open WOZ image!");
+            image.read(&mut file_buf).expect("Failed to read WOZ image data!");
+        } else {
+            dsk2woz::convert(file_path, &mut file_buf);
+        }
 
         WozImage::verify(&file_buf)?;
 
