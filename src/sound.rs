@@ -1,6 +1,12 @@
 use sdl2::audio::{AudioDevice, AudioCallback, AudioSpecDesired};
 
 const SAMPLE_BUF_SZ: usize = 1024;
+pub const SAMPLE_VOLUME: f32 = 0.5;
+pub const SAMPLE_RATE: u32 = 44100;
+
+mod soft_switch {
+    pub const SPEAKER: usize = 0xC030; // Whole page
+}
 
 pub struct SquareWave {
     buffer: [f32; SAMPLE_BUF_SZ],
@@ -40,7 +46,8 @@ impl AudioCallback for SquareWave {
 }
 
 pub struct SoundHandler {
-    pub device: AudioDevice<SquareWave>
+    pub device: AudioDevice<SquareWave>,
+    pub polarity: bool
 }
 
 impl SoundHandler {
@@ -62,7 +69,17 @@ impl SoundHandler {
         let device = audio_subsystem.open_playback(None, &audio_spec, |_| { wave }).unwrap();
 
         SoundHandler {
-            device
+            device,
+            polarity: false
+        }
+    }
+
+    pub fn handle_soft_sw(&mut self, address: usize) {
+        match address {
+            soft_switch::SPEAKER => {
+                self.polarity = !self.polarity;
+            },
+            _ => {}
         }
     }
 }

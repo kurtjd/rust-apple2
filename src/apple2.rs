@@ -1,9 +1,12 @@
-#![allow(dead_code)]
-
 use rust_6502::*;
 use crate::disk_controller::DiskController;
+use crate::graphics::GraphicsHandler;
+use crate::sound::SoundHandler;
+
 use std::{fs::File, io::Read};
 use std::path::Path;
+
+use sdl2::{Sdl, video::Window, video::WindowContext, render::Canvas, render::TextureCreator};
 
 mod settings {
     pub const CPU_CLK_SPEED: u32 = 1024000;
@@ -19,40 +22,20 @@ mod address {
 }
 
 mod soft_switch {
-    // Input
     pub const INPUT_CLEAR: usize = 0xC010; // Whole page
-    pub const SPEAKER: usize = 0xC030; // Whole page
-
-    // Graphics
-    pub const GFX_MODE: usize = 0xC050;
-    pub const TXT_MODE: usize = 0xC051;
-    pub const SINGLE_MODE: usize = 0xC052;
-    pub const MIXED_MODE: usize = 0xC053;
-    pub const PG1_MODE: usize = 0xC054;
-    pub const PG2_MODE: usize = 0xC055;
-    pub const LORES_MODE: usize = 0xC056;
-    pub const HIRES_MODE: usize = 0xC057;
 }
 
-enum GfxMode {
-    TEXT,
-    LORES,
-    HIRES
-}
-
-pub struct Apple2 {
+pub struct Apple2<'a> {
     pub cpu: Cpu6502,
-    gfx_mode: GfxMode,
-    gfx_mixed_mode: bool,
-    gfx_use_pg2: bool,
-    speaker: bool,
+    gfx_handler: GraphicsHandler<'a>,
+    pub snd_handler: SoundHandler,
     disk_controller: DiskController
 }
 
 pub const KEY_RIGHT: u8 = 0x95;
 pub const KEY_LEFT: u8 = 0x88;
 
-impl Apple2 {
+impl <'a>Apple2<'a> {
     fn load_rom(&mut self) {
         // Firmware ROM
         let mut fw_rom = File::open(
@@ -75,51 +58,26 @@ impl Apple2 {
 
     fn handle_soft_sw(&mut self) {
         for c in &self.cpu.cycles {
-            match c.address {
-                soft_switch::INPUT_CLEAR => {
-                    self.cpu.ram[address::INPUT_DATA] &= !(1 << 7);
-                },
-                soft_switch::SPEAKER => {
-                    self.speaker = !self.speaker;
-                },
-                soft_switch::GFX_MODE => {
-
-                },
-                soft_switch::TXT_MODE => {
-
-                },
-                soft_switch::SINGLE_MODE => {
-
-                },
-                soft_switch::MIXED_MODE => {
-
-                },
-                soft_switch::PG1_MODE => {
-
-                },
-                soft_switch::PG2_MODE => {
-
-                },
-                soft_switch::LORES_MODE => {
-
-                },
-                soft_switch::HIRES_MODE => {
-
-                },
-                _ => {
-                    self.disk_controller.handle_soft_sw(c.address, &mut self.cpu.ram)
-                }
+            if c.address >= 0xC080 {
+                self.disk_controller.handle_soft_sw(c.address, &mut self.cpu.ram)
+            } else if c.address >= 0xC050 {
+                self.gfx_handler.handle_soft_sw(c.address);
+            } else if c.address >= 0xC030 {
+                self.snd_handler.handle_soft_sw(c.address);
+            } else if c.address == soft_switch::INPUT_CLEAR {
+                self.cpu.ram[address::INPUT_DATA] &= !(1 << 7);
             }
         }
     }
 
-    pub fn new() -> Self {
+    pub fn new(
+        sdl_context: &Sdl,
+        canvas: &'a mut Canvas<Window>,
+        texture_creator: &'a TextureCreator<WindowContext>) -> Self {
         Apple2 {
             cpu: Cpu6502::new(address::ROM_START),
-            gfx_mode: GfxMode::TEXT,
-            gfx_mixed_mode: false,
-            gfx_use_pg2: false,
-            speaker: false,
+            gfx_handler: GraphicsHandler::new(canvas, texture_creator),
+            snd_handler: SoundHandler::new(sdl_context),
             disk_controller: DiskController::new(settings::DISK_SLOT)
         }
     }
@@ -133,13 +91,13 @@ impl Apple2 {
         self.disk_controller.load_image(Path::new(file_path));
     } 
 
-    pub fn run_frame(&mut self, frame_rate: u32, sample_rate: u32) -> Vec<bool> {
+    pub fn run_frame(&mut self, frame_rate: u32) {
         let mut frame_cycles = 0;
         let mut sample_cycles = 0;
         let mut speaker_samples: Vec<bool> = Vec::new();
 
         let cycles_per_frame = settings::CPU_CLK_SPEED / frame_rate;
-        let cycles_per_sample = settings::CPU_CLK_SPEED / sample_rate;
+        let cycles_per_sample = settings::CPU_CLK_SPEED / crate::sound::SAMPLE_RATE;
 
         while frame_cycles < cycles_per_frame {
             let cycles = self.cpu.tick() as u32;
@@ -147,7 +105,7 @@ impl Apple2 {
             sample_cycles += cycles;
 
             if sample_cycles >= cycles_per_sample {
-                speaker_samples.push(self.speaker);
+                speaker_samples.push(self.snd_handler.polarity);
                 sample_cycles = 0;
             }
 
@@ -155,7 +113,21 @@ impl Apple2 {
         }
 
         self.disk_controller.handle_motor_off_delay();
-        speaker_samples
+
+        // Feed sound samples from this frame to the sound handler
+        {
+            let mut lock = self.snd_handler.device.lock();
+            for s in speaker_samples {
+                lock.insert_sample(match s {
+                    true => crate::sound::SAMPLE_VOLUME,
+                    false => 0.0
+                });
+            }
+        }
+    }
+
+    pub fn draw_frame(&mut self, frame_rate: u32) {
+        self.gfx_handler.handle_gfx(frame_rate, &self.cpu.ram);
     }
 
     pub fn input_char(&mut self, ascii: u8) {

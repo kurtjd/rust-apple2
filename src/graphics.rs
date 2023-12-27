@@ -19,16 +19,36 @@ const CHAR_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
 const FLASH_RATE: u32 = 4;
 
+mod soft_switch {
+    pub const GFX_MODE: usize = 0xC050;
+    pub const TXT_MODE: usize = 0xC051;
+    pub const SINGLE_MODE: usize = 0xC052;
+    pub const MIXED_MODE: usize = 0xC053;
+    pub const PG1_MODE: usize = 0xC054;
+    pub const PG2_MODE: usize = 0xC055;
+    pub const LORES_MODE: usize = 0xC056;
+    pub const HIRES_MODE: usize = 0xC057;
+}
+
+enum GfxMode {
+    LORES,
+    HIRES
+}
+
 pub struct GraphicsHandler<'a> {
     canvas: &'a mut Canvas<Window>,
     pixel_buf: [u8; (WIN_WIDTH * WIN_HEIGHT * PIXEL_SIZE) as usize],
     pixel_surface: Texture<'a>,
     char_data: [u8; CHAR_ROM_SIZE],
     frame_count: u32,
-    invert_text: bool
+    flash: bool,
+    txt_mode: bool,
+    gfx_mode: GfxMode,
+    mixed_mode: bool,
+    use_pg2: bool
 }
 
-impl <'a> GraphicsHandler <'a> {
+impl <'a> GraphicsHandler<'a> {
     fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
         let mut char_rom = File::open(
             "roms/firmware/char_set.rom"
@@ -42,7 +62,7 @@ impl <'a> GraphicsHandler <'a> {
     fn handle_flash(&mut self, frame_rate: u32) {
         self.frame_count += 1;
         if self.frame_count >= frame_rate / FLASH_RATE {
-            self.invert_text = !self.invert_text;
+            self.flash = !self.flash;
             self.frame_count = 0;
         }
     }
@@ -67,7 +87,7 @@ impl <'a> GraphicsHandler <'a> {
             // 7th bit tells us if in invert mode
             // 6th bit tells us if in flash mode
             // So invert bits if in ivert mode, or in flash mode and invert_text is true
-            if (val & (1 << 7) == 0) && (val & (1 << 6) == 0 || self.invert_text) {
+            if (val & (1 << 7) == 0) && (val & (1 << 6) == 0 || self.flash) {
                 char_map ^= 0xFF; // Invert all bits
             }
             char_map <<= 1; // Then shift off high bit because we don't need it
@@ -132,6 +152,36 @@ impl <'a> GraphicsHandler <'a> {
         self.handle_flash(frame_rate);
     }
 
+    pub fn handle_soft_sw(&mut self, address: usize) {
+        match address {
+            soft_switch::GFX_MODE => {
+                self.txt_mode = false;
+            },
+            soft_switch::TXT_MODE => {
+                self.txt_mode = true;
+            },
+            soft_switch::SINGLE_MODE => {
+                self.mixed_mode = false;
+            },
+            soft_switch::MIXED_MODE => {
+                self.mixed_mode = true;
+            },
+            soft_switch::PG1_MODE => {
+                self.use_pg2 = false;
+            },
+            soft_switch::PG2_MODE => {
+                self.use_pg2 = true;
+            },
+            soft_switch::LORES_MODE => {
+                self.gfx_mode = GfxMode::LORES;
+            },
+            soft_switch::HIRES_MODE => {
+                self.gfx_mode = GfxMode::HIRES;
+            },
+            _ => {}
+        }
+     }
+
     pub fn new(
         canvas: &'a mut Canvas<Window>,
         texture_creator: &'a TextureCreator<WindowContext>) -> Self {
@@ -144,7 +194,11 @@ impl <'a> GraphicsHandler <'a> {
                 WIN_HEIGHT).unwrap(),
             char_data: GraphicsHandler::load_char_set(),
             frame_count: 0,
-            invert_text: false
+            flash: false,
+            txt_mode: true,
+            gfx_mode: GfxMode::LORES,
+            mixed_mode: false,
+            use_pg2: false
         }
     }
 }

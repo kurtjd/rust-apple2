@@ -6,8 +6,6 @@ mod wizard_of_woz;
 mod dsk2woz;
 
 use apple2::Apple2;
-use sound::SoundHandler;
-use graphics::GraphicsHandler;
 
 use std::time::{Instant, Duration};
 
@@ -17,11 +15,10 @@ use sdl2::keyboard::{Keycode, Mod};
 
 const FRAME_RATE: u32 = 60;
 const US_PER_FRAME: u64 = 1000000 / FRAME_RATE as u64;
-const SAMPLE_RATE: u32 = 44100;
-const SAMPLE_VOLUME: f32 = 0.5;
-
 
 fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
+    // TODO: Escape keys, and will need to change key for reset()
+
     for event in event_pump.poll_iter() {
         match event {
             Event::Quit {..} => {
@@ -74,14 +71,6 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    // Initialize Apple 2 emulator and insert disks
-    let mut apple2 = Apple2::new();
-    apple2.init();
-
-    if args.len() > 1 {
-        apple2.insert_disk(&args[1]);
-    }
-
     // Initialize SDL
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -94,32 +83,26 @@ fn main() {
         graphics::WIN_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
-    let mut graphics_handler = GraphicsHandler::new(&mut canvas, &texture_creator);
 
-    // Initialize audio
-    let mut sound_handler = SoundHandler::new(&sdl_context);
-    sound_handler.device.resume();
+    // Initialize Apple 2 emulator and insert disks
+    let mut apple2 = Apple2::new(&sdl_context, &mut canvas, &texture_creator);
+    apple2.init();
+    apple2.snd_handler.device.resume();
+
+    if args.len() > 1 {
+        apple2.insert_disk(&args[1]);
+    }
 
     // Main loop
     loop {
-        graphics_handler.handle_gfx(FRAME_RATE, &apple2.cpu.ram);
+        apple2.draw_frame(FRAME_RATE);
         if !handle_input(&mut apple2, &mut event_pump) {
             break;
         }
 
         let start_time = Instant::now();
 
-        // Feed sound samples from this frame to the sound handler
-        let speaker_samples = apple2.run_frame(FRAME_RATE, SAMPLE_RATE);
-        {
-            let mut lock = sound_handler.device.lock();
-            for s in speaker_samples {
-                lock.insert_sample(match s {
-                    true => SAMPLE_VOLUME,
-                    false => 0.0
-                });
-            }
-        }
+        apple2.run_frame(FRAME_RATE);
 
         // Sleep for rest of frame period
         let elapsed = Duration::from_micros(start_time.elapsed().as_micros() as u64);

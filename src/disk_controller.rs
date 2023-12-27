@@ -1,11 +1,17 @@
+/*
+TODO:
+-Handle 2nd disc
+-Handle writes
+-Handle proper reset behavior
+*/
+
 use std::path::Path;
 use crate::wizard_of_woz::WozImage;
 
 const MAX_TRACK: u8 = 34;
-const PERIPH_IO_ADDR: usize = 0xC080;
 
 mod soft_switch {
-    use super::PERIPH_IO_ADDR;
+    const PERIPH_IO_ADDR: usize = 0xC080;
 
     pub const PHASE0_OFF: usize = PERIPH_IO_ADDR + 0x0;
     pub const PHASE1_OFF: usize = PERIPH_IO_ADDR + 0x2;
@@ -75,11 +81,9 @@ impl DiskController {
     }
 
     pub fn handle_soft_sw(&mut self, address: usize, ram: &mut[u8]) {
-        if self.disk_image.is_none() || address < PERIPH_IO_ADDR {
+        if self.disk_image.is_none() {
             return;
         }
-
-        // TODO: Reset should force all switches off
 
         match address - self.slot {
             // Off
