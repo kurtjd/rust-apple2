@@ -10,14 +10,15 @@ pub const WIN_HEIGHT: u32 = 192;
 pub const DISP_SCALE: u32 = 3;
 
 const PIXEL_SIZE: u32 = 3;
-//const TEXT_ROWS: usize = 24;
-const TEXT_COLS: usize = 40;
-const PIXEL_ON_COLOR: u32 = 0x0000DD00;
+const CELL_ROWS: usize = 24;
+const CELL_COLS: usize = 40;
+const PIXEL_ON_COLOR: u32 = 0x00FFFFFF;
 const PIXEL_OFF_COLOR: u32 = 0x00000000;
-const CHAR_WIDTH: u32 = 7;
-const CHAR_HEIGHT: u32 = 8;
+const CELL_WIDTH: u32 = 7;
+const CELL_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
 const FLASH_RATE: u32 = 4;
+const BYTES_PER_CELL_ROW: usize = CELL_COLS * (CELL_WIDTH * PIXEL_SIZE) as usize;
 
 mod soft_switch {
     pub const GFX_MODE: usize = 0xC050;
@@ -30,11 +31,6 @@ mod soft_switch {
     pub const HIRES_MODE: usize = 0xC057;
 }
 
-enum GfxMode {
-    LORES,
-    HIRES
-}
-
 pub struct GraphicsHandler<'a> {
     canvas: &'a mut Canvas<Window>,
     pixel_buf: [u8; (WIN_WIDTH * WIN_HEIGHT * PIXEL_SIZE) as usize],
@@ -43,22 +39,29 @@ pub struct GraphicsHandler<'a> {
     frame_count: u32,
     flash: bool,
     txt_mode: bool,
-    gfx_mode: GfxMode,
+    hires_mode: bool,
     mixed_mode: bool,
     use_pg2: bool
 }
 
+fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
+    let mut char_rom = File::open(
+        "roms/firmware/char_set.rom"
+    ).expect("Failed to open charset ROM!");
+
+    let mut char_array = [0; CHAR_ROM_SIZE];
+    char_rom.read_exact(&mut char_array).expect("Failed to read char ROM data!");
+    char_array
+}
+
+fn cell_to_pbuf_idx(cell_idx: usize) -> usize {
+    let row = (cell_idx / CELL_COLS) as u32;
+    let col = (cell_idx % CELL_COLS) as u32;
+
+(row * (CELL_HEIGHT * BYTES_PER_CELL_ROW as u32) + col * (CELL_WIDTH * PIXEL_SIZE)) as usize
+}
+
 impl <'a> GraphicsHandler<'a> {
-    fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
-        let mut char_rom = File::open(
-            "roms/firmware/char_set.rom"
-        ).expect("Failed to open charset ROM!");
-
-        let mut char_array: [u8; CHAR_ROM_SIZE] = [0; CHAR_ROM_SIZE];
-        char_rom.read_exact(&mut char_array).expect("Failed to read char ROM data!");
-        char_array
-    }
-
     fn handle_flash(&mut self, frame_rate: u32) {
         self.frame_count += 1;
         if self.frame_count >= frame_rate / FLASH_RATE {
@@ -67,65 +70,95 @@ impl <'a> GraphicsHandler<'a> {
         }
     }
 
-    fn print_character(&mut self, val: u8, cell_idx: usize) {
-        let row = cell_idx / TEXT_COLS;
-        let col = cell_idx % TEXT_COLS;
+    fn draw_pixel(&mut self, color: u32, idx: usize) {
+        self.pixel_buf[idx] =     ((color >> 16) & 0xFF) as u8;
+        self.pixel_buf[idx + 1] = ((color >>  8) & 0xFF) as u8;
+        self.pixel_buf[idx + 2] = ((color >>  0) & 0xFF) as u8;
+    }
 
+    fn draw_char(&mut self, val: u8, cell_idx: usize) {
         // Mask off the upper two bits as they don't affect address
         // Then multiply by 8 (since each character is represented by 8 bytes)
-        let char_addr = ((val & 0x3F) as u32 * CHAR_HEIGHT) as usize;
-
-        // Convert row and col into an index into the 1D pixel buffer
-        let mut pbuf_idx = row * (CHAR_HEIGHT * WIN_WIDTH * PIXEL_SIZE) as usize
-                           + col * (CHAR_WIDTH * PIXEL_SIZE) as usize;
-
+        let char_addr = ((val & 0x3F) as u32 * CELL_HEIGHT) as usize;
 
         // For every byte (row) in character map
-        for i in char_addr..char_addr + CHAR_HEIGHT as usize {
+        let mut pbuf_idx = cell_to_pbuf_idx(cell_idx);
+        for i in char_addr..char_addr + CELL_HEIGHT as usize {
+            let mut idx = pbuf_idx;
             let mut char_map = self.char_data[i];
 
             // 7th bit tells us if in invert mode
             // 6th bit tells us if in flash mode
-            // So invert bits if in ivert mode, or in flash mode and invert_text is true
+            // So invert bits if in invert mode, or in flash mode and invert_text is true
             if (val & (1 << 7) == 0) && (val & (1 << 6) == 0 || self.flash) {
                 char_map ^= 0xFF; // Invert all bits
             }
             char_map <<= 1; // Then shift off high bit because we don't need it
 
             // For every dot in row of character map
-            for _ in 0..CHAR_WIDTH {
-                let pixel_color = match char_map & (1 << 7) != 0 {
+            for _ in 0..CELL_WIDTH {
+                let color = match char_map & (1 << 7) != 0 {
                     true => PIXEL_ON_COLOR,
                     false => PIXEL_OFF_COLOR
                 };
-                self.pixel_buf[pbuf_idx] =     ((pixel_color & 0x00FF0000) >> 16) as u8;
-                self.pixel_buf[pbuf_idx + 1] = ((pixel_color & 0x0000FF00) >>  8) as u8;
-                self.pixel_buf[pbuf_idx + 2] = ((pixel_color & 0x000000FF) >>  0) as u8;
 
+                self.draw_pixel(color, idx);
                 char_map <<= 1;
-                pbuf_idx += PIXEL_SIZE as usize;
+                idx += PIXEL_SIZE as usize;
             }
 
-            // Set pixel buffer index to next character row down
-            pbuf_idx -= (CHAR_WIDTH * PIXEL_SIZE) as usize;
-            pbuf_idx += (WIN_WIDTH * PIXEL_SIZE) as usize;
+            pbuf_idx += BYTES_PER_CELL_ROW;
+        }
+    }
+
+    fn draw_lores(&mut self, val: u8, cell_idx: usize) {
+        let color_map = [
+            0x000000, 0x901740, 0x402CA5, 0xD043E5,
+            0x006940, 0x808080, 0x2F95E5, 0xBFABFF,
+            0x405400, 0xD06A1A, 0x808080, 0xFF96BF,
+            0x2FBC1A, 0xBFD35A, 0x6FE8BF, 0xFFFFFF
+        ];
+
+        // Each nybble represents the top half and bottom half colors of a cell block
+        // A lookup table is used to map the nybble value to a color
+        let lower_color = color_map[(val >> 4) as usize] as u32;
+        let upper_color = color_map[(val & 0xF) as usize] as u32;
+
+        let mut pbuf_idx = cell_to_pbuf_idx(cell_idx);
+        for j in 0..CELL_HEIGHT {
+            let mut idx = pbuf_idx;
+
+            for _ in 0..CELL_WIDTH {
+                let color = match j < (CELL_HEIGHT / 2) {
+                    true => upper_color,
+                    false => lower_color
+                };
+
+                self.draw_pixel(color, idx);
+                idx += PIXEL_SIZE as usize;
+            }
+
+            pbuf_idx += BYTES_PER_CELL_ROW;
         }
     }
 
     fn handle_lores_gfx(&mut self, buffer: &[u8]) {
-        let start_addrs = [0x400, 0x428, 0x450];
+        let start_addrs = match self.use_pg2 {
+            true  => [0x800, 0x828, 0x850],
+            false => [0x400, 0x428, 0x450]
+        };
+
         let mut cell_idx = 0;
-
-        for start in start_addrs {
-            for j in 0..8 {
-                for i in 0..40 {
+        for (section, start) in start_addrs.iter().enumerate() {
+            for j in 0..(CELL_ROWS / 3) {
+                for i in 0..CELL_COLS {
                     let idx = start + 0x80 * j + i;
-                    // Match over gfx mode
-                    // If text:
-                    self.print_character(buffer[idx], cell_idx);
+                    let row = (section * 8) + j;
 
-                    // If lores:
-
+                    match self.txt_mode || (row >= 20 && self.mixed_mode) {
+                        true => self.draw_char(buffer[idx], cell_idx),
+                        false => self.draw_lores(buffer[idx], cell_idx)
+                    }
 
                     cell_idx += 1;
                 }
@@ -134,11 +167,11 @@ impl <'a> GraphicsHandler<'a> {
     }
 
     pub fn handle_gfx(&mut self, frame_rate: u32, buffer: &[u8]) {
-        // Match over gfx mode
-        // If Hires:
-
-        // If Lores/Text:
-        self.handle_lores_gfx(buffer);
+        if self.hires_mode {
+            // TODO
+        } else {
+            self.handle_lores_gfx(buffer);
+        }
 
         // Update canvas
         self.pixel_surface.update(
@@ -173,10 +206,10 @@ impl <'a> GraphicsHandler<'a> {
                 self.use_pg2 = true;
             },
             soft_switch::LORES_MODE => {
-                self.gfx_mode = GfxMode::LORES;
+                self.hires_mode = false;
             },
             soft_switch::HIRES_MODE => {
-                self.gfx_mode = GfxMode::HIRES;
+                self.hires_mode = true
             },
             _ => {}
         }
@@ -192,11 +225,11 @@ impl <'a> GraphicsHandler<'a> {
                 PixelFormatEnum::RGB24,
                 WIN_WIDTH,
                 WIN_HEIGHT).unwrap(),
-            char_data: GraphicsHandler::load_char_set(),
+            char_data: load_char_set(),
             frame_count: 0,
             flash: false,
             txt_mode: true,
-            gfx_mode: GfxMode::LORES,
+            hires_mode: false,
             mixed_mode: false,
             use_pg2: false
         }
