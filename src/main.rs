@@ -92,7 +92,8 @@ fn main() {
     apple2.snd_handler.device.resume();
 
     if args.len() > 1 {
-        apple2.insert_disk(&args[1]);
+        let disk_file = &args[1];
+        apple2.insert_disk(disk_file);
     }
 
     // Main loop

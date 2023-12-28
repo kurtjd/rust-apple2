@@ -73,7 +73,7 @@ fn fill_tmap(woz: &mut [u8]) {
     }
 }
 
-fn fill_trks(woz: &mut [u8], file_buf: &[u8]) {
+fn fill_trks(woz: &mut [u8], file_buf: &[u8], is_prodos: bool) {
     put_u32(section_id::TRKS, woz, 248);
     put_u32(1280 + (BLOCK_SIZE * BLOCKS_PER_TRACK * NUM_TRACKS), woz, 252);
 
@@ -87,7 +87,7 @@ fn fill_trks(woz: &mut [u8], file_buf: &[u8]) {
     let mut woz_idx = 0x600; // Start address of first track
     for i in 0..NUM_TRACKS {
         let dsk_idx = (BYTES_PER_SECTOR * NUM_SECTORS * i) as usize;
-        convert_track(&mut woz[woz_idx..], &file_buf[dsk_idx..], i as u8);
+        convert_track(&mut woz[woz_idx..], &file_buf[dsk_idx..], i as u8, is_prodos);
         woz_idx += (BLOCK_SIZE * BLOCKS_PER_TRACK) as usize;
     }
 }
@@ -161,7 +161,7 @@ fn convert_6_2(dsk: &[u8]) -> [u8; GCR_BYTES_PER_SECTOR as usize] {
     gcr_bytes
 }
 
-fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8) {
+fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8, is_prodos: bool) {
     let mut bit_pntr = 0;
 
     // Gap 1
@@ -196,9 +196,13 @@ fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8) {
         write_byte(woz, &mut bit_pntr, 0xAA);
         write_byte(woz, &mut bit_pntr, 0xAD);
 
+        let scalar = match is_prodos {
+            true => 8,
+            false => 7
+        };
         let logical_sector = match i == 15 {
             true => 15,
-            false => (i as usize * 7) % 15
+            false => (i as usize * scalar) % 15
         };
 
         // Convert 256 data bytes into 343 6 and 2 encoded disk bytes
@@ -219,7 +223,7 @@ fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8) {
     }
 }
 
-pub fn convert(file_path: &Path, woz: &mut [u8]) {
+pub fn convert(file_path: &Path, woz: &mut [u8], is_prodos: bool) {
     let mut file_buf = [0; DSK_IMG_SIZE];
     let mut image = File::open(file_path).expect("Failed to open DSK image!");
     image.read(&mut file_buf).expect("Failed to read DSK image data!");
@@ -227,5 +231,5 @@ pub fn convert(file_path: &Path, woz: &mut [u8]) {
     fill_header(woz);
     fill_info(woz);
     fill_tmap(woz);
-    fill_trks(woz, &file_buf);
+    fill_trks(woz, &file_buf, is_prodos);
 }

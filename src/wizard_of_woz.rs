@@ -114,12 +114,17 @@ impl WozImage {
 
     pub fn new(file_path: &Path) -> Result<Self, &'static str> {
         let mut file_buf = [0; WOZ_IMG_SIZE];
+        let ext = file_path.extension().unwrap().to_str().unwrap();
 
-        if file_path.extension().unwrap().to_str().unwrap() == "woz" {
+        if ext == "woz" {
             let mut image = File::open(file_path).expect("Failed to open WOZ image!");
             image.read(&mut file_buf).expect("Failed to read WOZ image data!");
+        } else if ext == "dsk" {
+            dsk2woz::convert(file_path, &mut file_buf, false);
+        } else if ext == "po" {
+            dsk2woz::convert(file_path, &mut file_buf, true);
         } else {
-            dsk2woz::convert(file_path, &mut file_buf);
+            return Err("Unsupported disk image type.");
         }
 
         WozImage::verify(&file_buf)?;
