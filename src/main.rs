@@ -76,11 +76,13 @@ fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     // Initialize video
+    /* Would be nice to move this all into the graphics module, but that requires making a 
+    self-referential data structure which is diffiult in Rust. Will revisit this in the future. */
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window(
         "Apple ][+",
-        graphics::WIN_WIDTH * graphics::DISP_SCALE,
-        graphics::WIN_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
+        graphics::DISP_WIDTH * graphics::DISP_SCALE,
+        graphics::DISP_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
 

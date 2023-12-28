@@ -5,20 +5,18 @@ use sdl2::{video::Window, render::Canvas, render::Texture};
 
 use std::{fs::File, io::Read};
 
-pub const WIN_WIDTH: u32 = 280;
-pub const WIN_HEIGHT: u32 = 192;
+pub const DISP_WIDTH: u32 = 280;
+pub const DISP_HEIGHT: u32 = 192;
 pub const DISP_SCALE: u32 = 3;
 
 const PIXEL_SIZE: u32 = 3;
-const CELL_ROWS: usize = 24;
-const CELL_COLS: usize = 40;
-const PIXEL_ON_COLOR: u32 = 0x00FFFFFF;
-const PIXEL_OFF_COLOR: u32 = 0x00000000;
-const CELL_WIDTH: u32 = 7;
-const CELL_HEIGHT: u32 = 8;
+const BLOCK_ROWS: usize = 24;
+const BLOCK_COLS: usize = 40;
+const BLOCK_WIDTH: u32 = 7;
+const BLOCK_HEIGHT: u32 = 8;
 const CHAR_ROM_SIZE: usize = 0x800;
 const FLASH_RATE: u32 = 4;
-const BYTES_PER_CELL_ROW: usize = CELL_COLS * (CELL_WIDTH * PIXEL_SIZE) as usize;
+const BYTES_PER_BLOCK_ROW: usize = BLOCK_COLS * (BLOCK_WIDTH * PIXEL_SIZE) as usize;
 
 mod soft_switch {
     pub const GFX_MODE: usize = 0xC050;
@@ -31,9 +29,37 @@ mod soft_switch {
     pub const HIRES_MODE: usize = 0xC057;
 }
 
+mod color {
+    // All
+    pub const BLACK: u32 = 0x000000;
+    pub const WHITE: u32 = 0xFFFFFF;
+
+    // LORES
+    pub const MAGENTA: u32 = 0x901740;
+    pub const DARK_BLUE: u32 = 0x402CA5;
+    pub const PURPLE: u32 = 0xD043E5;
+    pub const DARK_GREEN: u32 = 0x006940;
+    pub const GREY1: u32 = 0x808080;
+    pub const BLUE: u32 = 0x2F95E5;
+    pub const LIGHT_BLUE: u32 = 0xBFABFF;
+    pub const BROWN: u32 = 0x405400;
+    pub const ORANGE: u32 = 0xD06A1A;
+    pub const GREY2: u32 = 0x808080;
+    pub const PINK: u32 = 0xFF96BF;
+    pub const LIGHT_GREEN: u32 = 0x2FBC1A;
+    pub const YELLOW: u32 = 0xBFD35A;
+    pub const AQUA: u32 = 0x6FE8BF;
+
+    // HIRES
+    pub const HIRES_BLUE: u32 = 0x4BB8F1;
+    pub const HIRES_ORANGE: u32 = 0xE6792E;
+    pub const HIRES_VIOLET: u32 = 0xD660EF;
+    pub const HIRES_GREEN: u32 = 0x68E043;
+}
+
 pub struct GraphicsHandler<'a> {
     canvas: &'a mut Canvas<Window>,
-    pixel_buf: [u8; (WIN_WIDTH * WIN_HEIGHT * PIXEL_SIZE) as usize],
+    pixel_buf: [u8; (DISP_WIDTH * DISP_HEIGHT * PIXEL_SIZE) as usize],
     pixel_surface: Texture<'a>,
     char_data: [u8; CHAR_ROM_SIZE],
     frame_count: u32,
@@ -54,11 +80,86 @@ fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
     char_array
 }
 
-fn cell_to_pbuf_idx(cell_idx: usize) -> usize {
-    let row = (cell_idx / CELL_COLS) as u32;
-    let col = (cell_idx % CELL_COLS) as u32;
+fn block_to_pbuf_idx(block_idx: usize) -> usize {
+    let row = (block_idx / BLOCK_COLS) as u32;
+    let col = (block_idx % BLOCK_COLS) as u32;
 
-(row * (CELL_HEIGHT * BYTES_PER_CELL_ROW as u32) + col * (CELL_WIDTH * PIXEL_SIZE)) as usize
+    (row * (BLOCK_HEIGHT * BYTES_PER_BLOCK_ROW as u32) + col * (BLOCK_WIDTH * PIXEL_SIZE)) as usize
+}
+
+fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_WIDTH as usize] {
+    // The pixels for this block in order
+    let mut pixel_map = [color::BLACK; BLOCK_WIDTH as usize];
+
+    let val = buffer[buf_idx];
+    let alt_colors = (val >> 7) != 0; // If MSB is high, use alternate color palette
+    
+    // We need to check bordering dots, even if in adjacent bytes
+    let left_block_dot = match block_col != 0 {
+        true => (buffer[buf_idx - 1] >> 6) & 1,
+        false => 0
+    };
+    let right_block_dot = match block_col != (BLOCK_COLS - 1) {
+        true => buffer[buf_idx + 1] & 1,
+        false => 0
+    };
+
+    /* Scan each bit (except the MSB), mapping it to a color depending on its value and its
+    neighboring bits . */
+    let mut tmp = val;
+    for i in 0..7 {
+        let dot = tmp & 1;
+        let left_dot = match i == 0 {
+            true => left_block_dot,
+            false => val >> (i - 1) & 1
+        };
+        let right_dot = match i == 6 {
+            true => right_block_dot,
+            false => val >> (i + 1) & 1
+        };
+        
+        // "Evenness" depends on block column and position within block
+        let is_even = ((block_col % 2 == 0) && (i % 2 == 0)) ||
+                      ((block_col % 2 == 1) && (i % 2 == 1));
+
+        let color = if dot != 0 {
+            // Any high bit bordering another high bit becomes a white dot
+            if left_dot == 1 || right_dot == 1 {
+                color::WHITE 
+            } else if alt_colors && is_even {
+                color::HIRES_BLUE
+            } else if alt_colors && !is_even {
+                color::HIRES_ORANGE
+            } else if !alt_colors && is_even {
+                color::HIRES_VIOLET
+            } else {
+                color::HIRES_GREEN
+            }
+        
+        /* If the bit is low, but borders a high bit to its right, incorporate "fringing"
+        This is not perfect, fringing is difficult to get right with its half pixel shifts
+        and whatnot. */
+        } else if right_dot == 1 {
+            if alt_colors && !is_even {
+                color::HIRES_BLUE
+            } else if alt_colors && is_even {
+                color::HIRES_ORANGE
+            } else if !alt_colors && !is_even {
+                color::HIRES_VIOLET
+            } else {
+                color::HIRES_GREEN
+            }
+        
+        // Otherwise just draw a black pixel
+        } else {
+            color::BLACK
+        };
+
+        tmp >>= 1;
+        pixel_map[i] = color;
+    }
+
+    pixel_map
 }
 
 impl <'a> GraphicsHandler<'a> {
@@ -71,19 +172,19 @@ impl <'a> GraphicsHandler<'a> {
     }
 
     fn draw_pixel(&mut self, color: u32, idx: usize) {
-        self.pixel_buf[idx] =     ((color >> 16) & 0xFF) as u8;
-        self.pixel_buf[idx + 1] = ((color >>  8) & 0xFF) as u8;
-        self.pixel_buf[idx + 2] = ((color >>  0) & 0xFF) as u8;
+        for i in 0..PIXEL_SIZE as usize {
+            self.pixel_buf[idx + i] = ((color >> 16 - (8 * i)) & 0xFF) as u8;
+        }
     }
 
-    fn draw_char(&mut self, val: u8, cell_idx: usize) {
+    fn draw_char_block(&mut self, val: u8, block_idx: usize) {
         // Mask off the upper two bits as they don't affect address
         // Then multiply by 8 (since each character is represented by 8 bytes)
-        let char_addr = ((val & 0x3F) as u32 * CELL_HEIGHT) as usize;
+        let char_addr = ((val & 0x3F) as u32 * BLOCK_HEIGHT) as usize;
 
         // For every byte (row) in character map
-        let mut pbuf_idx = cell_to_pbuf_idx(cell_idx);
-        for i in char_addr..char_addr + CELL_HEIGHT as usize {
+        let mut pbuf_idx = block_to_pbuf_idx(block_idx);
+        for i in char_addr..char_addr + BLOCK_HEIGHT as usize {
             let mut idx = pbuf_idx;
             let mut char_map = self.char_data[i];
 
@@ -96,10 +197,10 @@ impl <'a> GraphicsHandler<'a> {
             char_map <<= 1; // Then shift off high bit because we don't need it
 
             // For every dot in row of character map
-            for _ in 0..CELL_WIDTH {
+            for _ in 0..BLOCK_WIDTH {
                 let color = match char_map & (1 << 7) != 0 {
-                    true => PIXEL_ON_COLOR,
-                    false => PIXEL_OFF_COLOR
+                    true  => color::WHITE,
+                    false => color::BLACK
                 };
 
                 self.draw_pixel(color, idx);
@@ -107,29 +208,29 @@ impl <'a> GraphicsHandler<'a> {
                 idx += PIXEL_SIZE as usize;
             }
 
-            pbuf_idx += BYTES_PER_CELL_ROW;
+            pbuf_idx += BYTES_PER_BLOCK_ROW;
         }
     }
 
-    fn draw_lores(&mut self, val: u8, cell_idx: usize) {
+    fn draw_lores_block(&mut self, val: u8, block_idx: usize) {
         let color_map = [
-            0x000000, 0x901740, 0x402CA5, 0xD043E5,
-            0x006940, 0x808080, 0x2F95E5, 0xBFABFF,
-            0x405400, 0xD06A1A, 0x808080, 0xFF96BF,
-            0x2FBC1A, 0xBFD35A, 0x6FE8BF, 0xFFFFFF
+            color::BLACK, color::MAGENTA, color::DARK_BLUE, color::PURPLE,
+            color::DARK_GREEN, color::GREY1, color::BLUE, color::LIGHT_BLUE,
+            color::BROWN, color::ORANGE, color::GREY2, color::PINK,
+            color::LIGHT_GREEN, color::YELLOW, color::AQUA, color::WHITE
         ];
 
-        // Each nybble represents the top half and bottom half colors of a cell block
+        // Each nybble represents the top half and bottom half colors of a block
         // A lookup table is used to map the nybble value to a color
         let lower_color = color_map[(val >> 4) as usize] as u32;
         let upper_color = color_map[(val & 0xF) as usize] as u32;
 
-        let mut pbuf_idx = cell_to_pbuf_idx(cell_idx);
-        for j in 0..CELL_HEIGHT {
+        let mut pbuf_idx = block_to_pbuf_idx(block_idx);
+        for j in 0..BLOCK_HEIGHT {
             let mut idx = pbuf_idx;
 
-            for _ in 0..CELL_WIDTH {
-                let color = match j < (CELL_HEIGHT / 2) {
+            for _ in 0..BLOCK_WIDTH {
+                let color = match j < (BLOCK_HEIGHT / 2) {
                     true => upper_color,
                     false => lower_color
                 };
@@ -138,46 +239,77 @@ impl <'a> GraphicsHandler<'a> {
                 idx += PIXEL_SIZE as usize;
             }
 
-            pbuf_idx += BYTES_PER_CELL_ROW;
+            pbuf_idx += BYTES_PER_BLOCK_ROW;
         }
     }
 
-    fn handle_lores_gfx(&mut self, buffer: &[u8]) {
-        let start_addrs = match self.use_pg2 {
+    fn draw_hires_block(&mut self, buffer: &[u8], buf_idx: usize, block_idx: usize) {
+        let block_col = block_idx % BLOCK_COLS;
+        let mut pbuf_idx = block_to_pbuf_idx(block_idx);
+
+        for j in 0..BLOCK_HEIGHT {
+            let mut idx = pbuf_idx;
+            let pixel_map = to_pixel_map(buffer, buf_idx + (j as usize * 1024), block_col);
+
+            for i in 0..BLOCK_WIDTH {
+                self.draw_pixel(pixel_map[i as usize], idx);
+                idx += PIXEL_SIZE as usize;
+            }
+
+            pbuf_idx += BYTES_PER_BLOCK_ROW;
+        }
+    }
+
+    /* The Apple 2 video memory mapping is crazy (though it makes sense why it is
+        the way that it is). So don't blame me for this insanity! */
+    fn draw_blocks(&mut self, buffer: &[u8]) {
+        let lores_addrs = match self.use_pg2 {
             true  => [0x800, 0x828, 0x850],
             false => [0x400, 0x428, 0x450]
         };
+        let hires_addrs = match self.use_pg2 {
+            true  => [0x4000, 0x4028, 0x4050],
+            false => [0x2000, 0x2028, 0x2050]
+        };
 
-        let mut cell_idx = 0;
+        let start_addrs = match self.hires_mode {
+            true  => &hires_addrs,
+            false => &lores_addrs,
+        };
+
+        // Regardless of gfx mode, we draw 7x8 pixel "blocks" one at a time
+        let mut block_idx = 0;
         for (section, start) in start_addrs.iter().enumerate() {
-            for j in 0..(CELL_ROWS / 3) {
-                for i in 0..CELL_COLS {
-                    let idx = start + 0x80 * j + i;
-                    let row = (section * 8) + j;
+            for j in 0..(BLOCK_ROWS / 3) {
+                for i in 0..BLOCK_COLS {
+                    let offset = 0x80 * j + i;
+                    let idx = start + offset;
+                    let txt_idx = lores_addrs[section] + offset;
+                    let block_row = (section * 8) + j;
 
-                    match self.txt_mode || (row >= 20 && self.mixed_mode) {
-                        true => self.draw_char(buffer[idx], cell_idx),
-                        false => self.draw_lores(buffer[idx], cell_idx)
+                    // If in mixed mode, always draw characters in the last 4 block rows
+                    match self.txt_mode || (block_row >= 20 && self.mixed_mode) {
+                        true  => self.draw_char_block(buffer[txt_idx], block_idx),
+                        false => match self.hires_mode {
+                            true  => self.draw_hires_block(buffer, idx, block_idx),
+                            false => self.draw_lores_block(buffer[idx], block_idx)
+                        }
                     }
 
-                    cell_idx += 1;
+                    block_idx += 1;
                 }
             }
         }
     }
 
     pub fn handle_gfx(&mut self, frame_rate: u32, buffer: &[u8]) {
-        if self.hires_mode {
-            // TODO
-        } else {
-            self.handle_lores_gfx(buffer);
-        }
+        self.draw_blocks(buffer);
 
         // Update canvas
         self.pixel_surface.update(
             None,
             &self.pixel_buf, 
-            (WIN_WIDTH * PIXEL_SIZE) as usize).unwrap();
+            (DISP_WIDTH * PIXEL_SIZE) as usize).unwrap();
         self.canvas.copy(&self.pixel_surface, None, None).unwrap();
         self.canvas.present();
 
@@ -220,11 +352,11 @@ impl <'a> GraphicsHandler<'a> {
         texture_creator: &'a TextureCreator<WindowContext>) -> Self {
         GraphicsHandler {
             canvas,
-            pixel_buf: [0; (WIN_WIDTH * WIN_HEIGHT * PIXEL_SIZE) as usize],
+            pixel_buf: [0; (DISP_WIDTH * DISP_HEIGHT * PIXEL_SIZE) as usize],
             pixel_surface: texture_creator.create_texture_static(
                 PixelFormatEnum::RGB24,
-                WIN_WIDTH,
-                WIN_HEIGHT).unwrap(),
+                DISP_WIDTH,
+                DISP_HEIGHT).unwrap(),
             char_data: load_char_set(),
             frame_count: 0,
             flash: false,
