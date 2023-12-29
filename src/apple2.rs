@@ -93,12 +93,17 @@ impl <'a>Apple2<'a> {
 
     pub fn run_frame(&mut self, frame_rate: u32) {
         let mut frame_cycles = 0;
+        let cycles_per_frame = settings::CPU_CLK_SPEED / frame_rate;
+
+        /* Sound stuff...
+            Sound is hard okay? */
         let mut sample_cycles = 0;
         let mut speaker_samples: Vec<bool> = Vec::new();
-
-        let cycles_per_frame = settings::CPU_CLK_SPEED / frame_rate;
+        let mut polarity_change = false;
+        let prev_polarity = self.snd_handler.polarity;
         let cycles_per_sample = settings::CPU_CLK_SPEED / crate::sound::SAMPLE_RATE;
 
+        // Tick the CPU for this frame
         while frame_cycles < cycles_per_frame {
             let cycles = self.cpu.tick() as u32;
             frame_cycles += cycles;
@@ -107,23 +112,23 @@ impl <'a>Apple2<'a> {
             if sample_cycles >= cycles_per_sample {
                 speaker_samples.push(self.snd_handler.polarity);
                 sample_cycles = 0;
+
+                if self.snd_handler.polarity != prev_polarity {
+                    polarity_change = true;
+                }
             }
 
             self.handle_soft_sw();
         }
 
-        self.disk_controller.handle_motor_off_delay();
-
-        // Feed sound samples from this frame to the sound handler
-        {
-            let mut lock = self.snd_handler.device.lock();
-            for s in speaker_samples {
-                lock.insert_sample(match s {
-                    true => crate::sound::SAMPLE_VOLUME,
-                    false => 0.0
-                });
-            }
+        /* Feed sound samples from this frame to the sound handler.
+        If the polarity didn't change, don't insert samples so we don't get that buzzing that
+        SDL produces for non-zero samples. */
+        if polarity_change {
+            self.snd_handler.insert_samples(&speaker_samples);
         }
+
+        self.disk_controller.handle_motor_off_delay();
     }
 
     pub fn draw_frame(&mut self, frame_rate: u32) {
