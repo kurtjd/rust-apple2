@@ -20,7 +20,7 @@ In addition, software making use of various peripherals not listed will likely n
 
 However the base Apple II+ was still a powerful machine for its time so plenty of fun to be had with this emulator! Check out this video demo of it running Cannonball Blitz:
 
-[<img src = "/screenshots/cannonball_blitz.png?raw=true">](https://www.youtube.com/watch?v=unlvwdRlgIs)
+[<img src = "/screenshots/cannonball_blitz_video.png?raw=true" width="75%" height="75%">](https://www.youtube.com/watch?v=unlvwdRlgIs)
 
 ## Features
 ### MOS 6502 CPU
