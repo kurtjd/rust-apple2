@@ -5,11 +5,11 @@
 
 |Lode Runner|Castle Wolfenstein|
 |-------------|----|
-|<img src = "/screenshots/lode_runner.png?raw=true">|<img src = "/screenshots/castle_wolfenstein?raw=true">|
+|<img src = "/screenshots/lode_runner.png?raw=true">|<img src = "/screenshots/castle_wolfenstein.png?raw=true">|
 
 |Cannonball Blitz|DOS 3.3|
 |--------------|---------------|
-|<img src = "/screenshots/cannonball_blitz.gif?raw=true">|<img src = "/screenshots/dos.png?raw=true">|
+|<img src = "/screenshots/cannonball_blitz.png?raw=true">|<img src = "/screenshots/dos.png?raw=true">|
 
 Just another Apple II+ emulator I've been writing to get more familiar with Rust and to indulge my interest in emulating retro machines.
 This is my first attempt at a Rust program so the code can likely definitely use a lot of improvement, but I felt like I've already improved my Rust skills a lot so still happy with the outcome!
