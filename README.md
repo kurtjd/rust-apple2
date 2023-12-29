@@ -64,6 +64,12 @@ To run with a disk:
 `cargo run <PATH-TO-DISK-IMAGE>`
 
 ## Usage
+You will need three binary ROM files containing the firmware and character set for this emulator to boot, listed below:
+* Apple II+ Firmware *(roms/firmware/apple2_plus.rom)*
+* Disk II Controller Firmware (the P5 ROM) *(roms/firmware/disk2.rom)*
+* Character Set Data *(roms/firmware/char_set.rom)*
+
+
 After starting, if a disk image is inserted the Apple II firmware will automatically boot the disk after a short period. If a disk is not inserted, press the `Esc` key to reset the CPU and enter the Applesoft BASIC prompt. The `Esc` key can be used to reset the CPU at anytime.
 
 ## TODO
