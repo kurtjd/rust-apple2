@@ -17,7 +17,10 @@ This is my first attempt at a Rust program so the code can likely definitely use
 As the title states, this emulates your typical Apple II+ with a display, keyboard, 1-bit speaker, floppy disk drive, and 48k RAM.
 Thus, software written for later versions of the Apple II such as the Apple IIe will not work correctly.
 In addition, software making use of various peripherals not listed will likely not work correctly as well.
-However the base Apple II+ was still a powerful machine for its time so plenty of fun to be had with this emulator!
+
+However the base Apple II+ was still a powerful machine for its time so plenty of fun to be had with this emulator! Check out this video demo of it running Cannonball Blitz:
+
+[<img src = "/screenshots/cannonball_blitz.png?raw=true">](https://www.youtube.com/watch?v=unlvwdRlgIs)
 
 ## Features
 ### MOS 6502 CPU
@@ -28,6 +31,7 @@ The CPU passes a wide gamut of tests and is "cycle accurate" in the sense that e
 ### Display
 Supports text, lores, hires, and mixed mode graphics.
 Though hires graphics are quite tricky in that certain color combinations would produce "fringing" and other artifacts on some displays of the time.
+
 I've managed to reproduce this "fringing" effect somewhat, though getting it perfect would be quite involved. However, it's pretty close!
 
 ### Keyboard
@@ -35,6 +39,7 @@ Supports the typical keys from the Apple II keyboard of the time, though I have 
 
 ### Sound
 Although the Apple II+ only had a simple 1-bit speaker, which could generate tones of various frequences by changing the polarity of the speaker, this can actually be a bit tricky to emulate on modern audio devices.
+
 For my purposes, I simply sample the polarity of the speaker at a rate of 44.1 kHz and feed those samples as a square wave to the audio output, which seems to work well enough though of course this can definitely be improved to get further sound fidelity.
 
 ### Floppy Disk Controller
