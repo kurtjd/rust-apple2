@@ -4,10 +4,14 @@ mod graphics;
 mod disk_controller;
 mod wizard_of_woz;
 mod dsk2woz;
+mod mem_manager;
 
 use apple2::Apple2;
+use mem_manager::MemManager;
 
 use std::time::{Instant, Duration};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use sdl2::EventPump;
 use sdl2::event::Event;
@@ -25,7 +29,7 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
                 return false;
             }
             Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                apple2.cpu.reset();
+                apple2.reset();
             }
             Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
                 // Special case for arrow keys because they don't have an ASCII code
@@ -87,9 +91,12 @@ fn main() {
     let texture_creator = canvas.texture_creator();
 
     // Initialize Apple 2 emulator and insert disks
-    let mut apple2 = Apple2::new(&sdl_context, &mut canvas, &texture_creator);
+    /* Again, would like to move memory manager construction to apple2 but since the CPU also
+    relies on the memory manager, this creates a self-referential data structure. In the future
+    will have to find a better way to design what I'm trying to achieve to avoid this. */
+    let mem_manager = Rc::new(RefCell::new(MemManager::new()));
+    let mut apple2 = Apple2::new(&mem_manager, &sdl_context, &mut canvas, &texture_creator);
     apple2.init();
-    apple2.snd_handler.device.resume();
 
     if args.len() > 1 {
         let disk_file = &args[1];
