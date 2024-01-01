@@ -55,7 +55,7 @@ My emulator can support DSK disk images (simply the bytes of each track and sect
 though I plan to improve this a bit more as it seems certain disks don't boot correctly, which means I may have some inaccuracies in my emulation.
 
 ### RAM
-Supports 48k + 16k of RAM, as well as 12k of ROM.
+Supports 48k + 16k of RAM, as well as 16k of ROM.
 
 Like most 8-bit CPUs of the time, the 6502 only has a 16-bit address space (thus can address 64k bytes total), so the language card peripheral was created to allow for an additional 16k of RAM via bank switching, which this emulator supports.
 
