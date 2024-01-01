@@ -116,6 +116,13 @@ impl MemManager {
     }
 
     // Used by the Apple 2 emulator
+    pub fn reset(&mut self) {
+        self.bank2_active = true;
+        self.rom_read = true;
+        self.ram_write = true;
+        self.write_en_count = WRITE_EN_COUNT_MAX;
+    }
+
     pub fn get_cycles(&self) -> Vec<Cycle> {
         // Yeah we do a copy otherwise borrow checker yells...
         self.cycles.clone()

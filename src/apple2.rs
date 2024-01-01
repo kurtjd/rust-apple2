@@ -118,7 +118,9 @@ impl <'a>Apple2<'a> {
     }
 
     pub fn reset(&mut self) {
+        self.mem_manager.borrow_mut().reset();
         self.cpu.reset();
+        self.disk_controller.reset();
     }
 
     pub fn insert_disk(&mut self, file_path: &String) {

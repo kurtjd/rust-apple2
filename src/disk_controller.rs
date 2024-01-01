@@ -67,6 +67,16 @@ impl DiskController {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.phases.fill(false);
+        self.current_phase = 0;
+        self.data_reg = 0;
+        self.write_mode = false;
+        self.write_sense = false;
+        self.motor_off_delay = 0;
+        self.drives_on = false;
+    }
+
     pub fn load_image(&mut self, image_path: &Path) {
         self.disk_image = Some(
             WozImage::new(image_path).unwrap()
