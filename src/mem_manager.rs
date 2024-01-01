@@ -132,7 +132,14 @@ impl MemManager {
         self.cycles.clear();
     }
 
-    pub fn handle_soft_sw(&mut self, address: usize) {
+    pub fn handle_soft_sw(&mut self, address: usize, ctype: &String) {
+        /* Only respond to read requests. But if we receive a write, reset the write enable count
+        because technically it requires two READs to become enabled. */
+        if ctype == "write" {
+            self.write_en_count = WRITE_EN_COUNT_MAX;
+            return;
+        }
+
         match address {
             soft_switch::BANK2_RAM_READ_NO_WRITE | soft_switch::BANK2_RAM_READ_NO_WRITE_ALT => {
                 self.read_enable(true, false);

@@ -73,7 +73,7 @@ impl <'a>Apple2<'a> {
                     &mut self.mem_manager.borrow_mut().memory
                 );
             } else if c.address >= 0xC080 {
-                self.mem_manager.borrow_mut().handle_soft_sw(c.address);
+                self.mem_manager.borrow_mut().handle_soft_sw(c.address, &c.ctype);
             } else if c.address >= 0xC050 {
                 self.gfx_handler.handle_soft_sw(c.address);
             } else if c.address >= 0xC030 {
