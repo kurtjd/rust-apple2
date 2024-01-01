@@ -14,7 +14,7 @@
 Just another Apple II+ emulator I've been writing to get more familiar with Rust and to indulge my interest in emulating retro machines.
 This is my first attempt at a Rust program so the code can likely definitely use a lot of improvement, but I felt like I've already improved my Rust skills a lot so still happy with the outcome!
 
-As the title states, this emulates your typical Apple II+ with a display, keyboard, 1-bit speaker, floppy disk drive, and 48k RAM.
+As the title states, this emulates your typical Apple II+ with a display, keyboard, 1-bit speaker, floppy disk drive, and 48k RAM (+16k additional RAM via bank switching).
 Thus, software written for later versions of the Apple II such as the Apple IIe will not work correctly.
 In addition, software making use of various peripherals not listed will likely not work correctly as well.
 
@@ -55,7 +55,9 @@ My emulator can support DSK disk images (simply the bytes of each track and sect
 though I plan to improve this a bit more as it seems certain disks don't boot correctly, which means I may have some inaccuracies in my emulation.
 
 ### RAM
-Supports 48k of RAM, and an additional 12k of ROM. Fortunately the Apple II+ didn't utilize bank switching, so didn't have to worry about that!
+Supports 48k + 16k of RAM, as well as 12k of ROM.
+
+Like most 8-bit CPUs of the time, the 6502 only has a 16-bit address space (thus can address 64k bytes total), so the language card peripheral was created to allow for an additional 16k of RAM via bank switching, which this emulator supports.
 
 
 ## Build

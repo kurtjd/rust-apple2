@@ -55,7 +55,8 @@ impl <'a>Apple2<'a> {
         ).expect("Failed to open Disk II ROM!");
 
         disc_rom.read_exact(
-            &mut self.mem_manager.borrow_mut().memory[address::DISK2_START..address::DISK2_START + settings::PERIPH_ROM_SZ]
+            &mut self.mem_manager.borrow_mut()
+            .memory[address::DISK2_START..address::DISK2_START + settings::PERIPH_ROM_SZ]
         ).expect("Failed to read Disk II ROM data!");
     }
 
@@ -67,9 +68,12 @@ impl <'a>Apple2<'a> {
         let cycles = self.mem_manager.borrow().get_cycles();
         for c in &cycles {
             if c.address >= 0xC090 {
-                self.disk_controller.handle_soft_sw(c.address, &mut self.mem_manager.borrow_mut().memory);
+                self.disk_controller.handle_soft_sw(
+                    c.address,
+                    &mut self.mem_manager.borrow_mut().memory
+                );
             } else if c.address >= 0xC080 {
-                self.mem_manager.borrow_mut().handle_soft_sw();
+                self.mem_manager.borrow_mut().handle_soft_sw(c.address);
             } else if c.address >= 0xC050 {
                 self.gfx_handler.handle_soft_sw(c.address);
             } else if c.address >= 0xC030 {
