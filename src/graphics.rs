@@ -184,9 +184,9 @@ impl <'a> GraphicsHandler<'a> {
 
         // For every byte (row) in character map
         let mut pbuf_idx = block_to_pbuf_idx(block_idx);
-        for i in char_addr..char_addr + BLOCK_HEIGHT as usize {
+        for j in char_addr..char_addr + BLOCK_HEIGHT as usize {
             let mut idx = pbuf_idx;
-            let mut char_map = self.char_data[i];
+            let mut char_map = self.char_data[j];
 
             // 7th bit tells us if in invert mode
             // 6th bit tells us if in flash mode
@@ -194,17 +194,41 @@ impl <'a> GraphicsHandler<'a> {
             if (val & (1 << 7) == 0) && (val & (1 << 6) == 0 || self.flash) {
                 char_map ^= 0xFF; // Invert all bits
             }
-            char_map <<= 1; // Then shift off high bit because we don't need it
+
+            // If in hires mode, convert text row into hires pixel mapping
+            let mut pixel_map: Option<[u32; BLOCK_WIDTH as usize]> = None;
+            if self.hires_mode {
+                let block_col = block_idx % BLOCK_COLS;
+                
+                // Need to reverse the 6 LSBs because hires mode has things reversed
+                let mut reverse = 0;
+                for k in 0..7 {
+                    if (char_map & (1 << k)) != 0 {
+                        reverse |= 1 << (6 - k);
+                    }
+                }
+                
+                // Create this "buffer" because that's what pixel map expects for hires mode
+                let buffer = [0, reverse, 0];
+                pixel_map = Some(to_pixel_map(&buffer, 1, block_col));
+            } else {
+                char_map <<= 1; // Then shift off high bit because we don't need it
+            }
 
             // For every dot in row of character map
-            for _ in 0..BLOCK_WIDTH {
-                let color = match char_map & (1 << 7) != 0 {
-                    true  => color::WHITE,
-                    false => color::BLACK
-                };
+            for i in 0..BLOCK_WIDTH {
+                if let Some(pixel_map) = pixel_map {
+                    self.draw_pixel(pixel_map[i as usize], idx);
+                } else {
+                    let color = match char_map & (1 << 7) != 0 {
+                        true  => color::WHITE,
+                        false => color::BLACK
+                    };
 
-                self.draw_pixel(color, idx);
-                char_map <<= 1;
+                    self.draw_pixel(color, idx);
+                    char_map <<= 1;
+                }
+
                 idx += PIXEL_SIZE as usize;
             }
 
@@ -324,6 +348,7 @@ impl <'a> GraphicsHandler<'a> {
             },
             soft_switch::TXT_MODE => {
                 self.txt_mode = true;
+                self.hires_mode = false;
             },
             soft_switch::SINGLE_MODE => {
                 self.mixed_mode = false;
