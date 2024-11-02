@@ -1,7 +1,7 @@
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::TextureCreator;
 use sdl2::video::WindowContext;
-use sdl2::{video::Window, render::Canvas, render::Texture};
+use sdl2::{render::Canvas, render::Texture, video::Window};
 
 use std::{fs::File, io::Read};
 
@@ -67,16 +67,17 @@ pub struct GraphicsHandler<'a> {
     txt_mode: bool,
     hires_mode: bool,
     mixed_mode: bool,
-    use_pg2: bool
+    use_pg2: bool,
 }
 
 fn load_char_set() -> [u8; CHAR_ROM_SIZE] {
-    let mut char_rom = File::open(
-        "roms/firmware/char_set.rom"
-    ).expect("Failed to open charset ROM!");
+    let mut char_rom =
+        File::open("roms/firmware/char_set.rom").expect("Failed to open charset ROM!");
 
     let mut char_array = [0; CHAR_ROM_SIZE];
-    char_rom.read_exact(&mut char_array).expect("Failed to read char ROM data!");
+    char_rom
+        .read_exact(&mut char_array)
+        .expect("Failed to read char ROM data!");
     char_array
 }
 
@@ -93,15 +94,15 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
 
     let val = buffer[buf_idx];
     let alt_colors = (val >> 7) != 0; // If MSB is high, use alternate color palette
-    
+
     // We need to check bordering dots, even if in adjacent bytes
     let left_block_dot = match block_col != 0 {
         true => (buffer[buf_idx - 1] >> 6) & 1,
-        false => 0
+        false => 0,
     };
     let right_block_dot = match block_col != (BLOCK_COLS - 1) {
         true => buffer[buf_idx + 1] & 1,
-        false => 0
+        false => 0,
     };
 
     /* Scan each bit (except the MSB), mapping it to a color depending on its value and its
@@ -111,21 +112,21 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
         let dot = tmp & 1;
         let left_dot = match i == 0 {
             true => left_block_dot,
-            false => val >> (i - 1) & 1
+            false => val >> (i - 1) & 1,
         };
         let right_dot = match i == 6 {
             true => right_block_dot,
-            false => val >> (i + 1) & 1
+            false => val >> (i + 1) & 1,
         };
-        
+
         // "Evenness" depends on block column and position within block
-        let is_even = ((block_col % 2 == 0) && (i % 2 == 0)) ||
-                      ((block_col % 2 == 1) && (i % 2 == 1));
+        let is_even =
+            ((block_col % 2 == 0) && (i % 2 == 0)) || ((block_col % 2 == 1) && (i % 2 == 1));
 
         let color = if dot != 0 {
             // Any high bit bordering another high bit becomes a white dot
             if left_dot == 1 || right_dot == 1 {
-                color::WHITE 
+                color::WHITE
             } else if alt_colors && is_even {
                 color::HIRES_BLUE
             } else if alt_colors && !is_even {
@@ -135,7 +136,7 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
             } else {
                 color::HIRES_GREEN
             }
-        
+
         /* If the bit is low, but borders a high bit to its right, incorporate "fringing"
         This is not perfect, fringing is difficult to get right with its half pixel shifts
         and whatnot. */
@@ -149,7 +150,7 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
             } else {
                 color::HIRES_GREEN
             }
-        
+
         // Otherwise just draw a black pixel
         } else {
             color::BLACK
@@ -162,7 +163,7 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
     pixel_map
 }
 
-impl <'a> GraphicsHandler<'a> {
+impl<'a> GraphicsHandler<'a> {
     fn handle_flash(&mut self, frame_rate: u32) {
         self.frame_count += 1;
         if self.frame_count >= frame_rate / FLASH_RATE {
@@ -199,7 +200,7 @@ impl <'a> GraphicsHandler<'a> {
             let mut pixel_map: Option<[u32; BLOCK_WIDTH as usize]> = None;
             if self.hires_mode {
                 let block_col = block_idx % BLOCK_COLS;
-                
+
                 // Need to reverse the 6 LSBs because hires mode has things reversed
                 let mut reverse = 0;
                 for k in 0..7 {
@@ -207,7 +208,7 @@ impl <'a> GraphicsHandler<'a> {
                         reverse |= 1 << (6 - k);
                     }
                 }
-                
+
                 // Create this "buffer" because that's what pixel map expects for hires mode
                 let buffer = [0, reverse, 0];
                 pixel_map = Some(to_pixel_map(&buffer, 1, block_col));
@@ -221,8 +222,8 @@ impl <'a> GraphicsHandler<'a> {
                     self.draw_pixel(pixel_map[i as usize], idx);
                 } else {
                     let color = match char_map & (1 << 7) != 0 {
-                        true  => color::WHITE,
-                        false => color::BLACK
+                        true => color::WHITE,
+                        false => color::BLACK,
                     };
 
                     self.draw_pixel(color, idx);
@@ -238,10 +239,22 @@ impl <'a> GraphicsHandler<'a> {
 
     fn draw_lores_block(&mut self, val: u8, block_idx: usize) {
         let color_map = [
-            color::BLACK, color::MAGENTA, color::DARK_BLUE, color::PURPLE,
-            color::DARK_GREEN, color::GREY1, color::BLUE, color::LIGHT_BLUE,
-            color::BROWN, color::ORANGE, color::GREY2, color::PINK,
-            color::LIGHT_GREEN, color::YELLOW, color::AQUA, color::WHITE
+            color::BLACK,
+            color::MAGENTA,
+            color::DARK_BLUE,
+            color::PURPLE,
+            color::DARK_GREEN,
+            color::GREY1,
+            color::BLUE,
+            color::LIGHT_BLUE,
+            color::BROWN,
+            color::ORANGE,
+            color::GREY2,
+            color::PINK,
+            color::LIGHT_GREEN,
+            color::YELLOW,
+            color::AQUA,
+            color::WHITE,
         ];
 
         // Each nybble represents the top half and bottom half colors of a block
@@ -256,7 +269,7 @@ impl <'a> GraphicsHandler<'a> {
             for _ in 0..BLOCK_WIDTH {
                 let color = match j < (BLOCK_HEIGHT / 2) {
                     true => upper_color,
-                    false => lower_color
+                    false => lower_color,
                 };
 
                 self.draw_pixel(color, idx);
@@ -285,19 +298,19 @@ impl <'a> GraphicsHandler<'a> {
     }
 
     /* The Apple 2 video memory mapping is crazy (though it makes sense why it is
-        the way that it is). So don't blame me for this insanity! */
+    the way that it is). So don't blame me for this insanity! */
     fn draw_blocks(&mut self, buffer: &[u8]) {
         let lores_addrs = match self.use_pg2 {
-            true  => [0x800, 0x828, 0x850],
-            false => [0x400, 0x428, 0x450]
+            true => [0x800, 0x828, 0x850],
+            false => [0x400, 0x428, 0x450],
         };
         let hires_addrs = match self.use_pg2 {
-            true  => [0x4000, 0x4028, 0x4050],
-            false => [0x2000, 0x2028, 0x2050]
+            true => [0x4000, 0x4028, 0x4050],
+            false => [0x2000, 0x2028, 0x2050],
         };
 
         let start_addrs = match self.hires_mode {
-            true  => &hires_addrs,
+            true => &hires_addrs,
             false => &lores_addrs,
         };
 
@@ -313,11 +326,11 @@ impl <'a> GraphicsHandler<'a> {
 
                     // If in mixed mode, always draw characters in the last 4 block rows
                     match self.txt_mode || (block_row >= 20 && self.mixed_mode) {
-                        true  => self.draw_char_block(buffer[txt_idx], block_idx),
+                        true => self.draw_char_block(buffer[txt_idx], block_idx),
                         false => match self.hires_mode {
-                            true  => self.draw_hires_block(buffer, idx, block_idx),
-                            false => self.draw_lores_block(buffer[idx], block_idx)
-                        }
+                            true => self.draw_hires_block(buffer, idx, block_idx),
+                            false => self.draw_lores_block(buffer[idx], block_idx),
+                        },
                     }
 
                     block_idx += 1;
@@ -330,10 +343,9 @@ impl <'a> GraphicsHandler<'a> {
         self.draw_blocks(buffer);
 
         // Update canvas
-        self.pixel_surface.update(
-            None,
-            &self.pixel_buf, 
-            (DISP_WIDTH * PIXEL_SIZE) as usize).unwrap();
+        self.pixel_surface
+            .update(None, &self.pixel_buf, (DISP_WIDTH * PIXEL_SIZE) as usize)
+            .unwrap();
         self.canvas.copy(&self.pixel_surface, None, None).unwrap();
         self.canvas.present();
 
@@ -345,50 +357,48 @@ impl <'a> GraphicsHandler<'a> {
         match address {
             soft_switch::GFX_MODE => {
                 self.txt_mode = false;
-            },
+            }
             soft_switch::TXT_MODE => {
                 self.txt_mode = true;
                 self.hires_mode = false;
-            },
+            }
             soft_switch::SINGLE_MODE => {
                 self.mixed_mode = false;
-            },
+            }
             soft_switch::MIXED_MODE => {
                 self.mixed_mode = true;
-            },
+            }
             soft_switch::PG1_MODE => {
                 self.use_pg2 = false;
-            },
+            }
             soft_switch::PG2_MODE => {
                 self.use_pg2 = true;
-            },
+            }
             soft_switch::LORES_MODE => {
                 self.hires_mode = false;
-            },
-            soft_switch::HIRES_MODE => {
-                self.hires_mode = true
-            },
+            }
+            soft_switch::HIRES_MODE => self.hires_mode = true,
             _ => {}
         }
-     }
+    }
 
     pub fn new(
         canvas: &'a mut Canvas<Window>,
-        texture_creator: &'a TextureCreator<WindowContext>) -> Self {
+        texture_creator: &'a TextureCreator<WindowContext>,
+    ) -> Self {
         GraphicsHandler {
             canvas,
             pixel_buf: [0; (DISP_WIDTH * DISP_HEIGHT * PIXEL_SIZE) as usize],
-            pixel_surface: texture_creator.create_texture_static(
-                PixelFormatEnum::RGB24,
-                DISP_WIDTH,
-                DISP_HEIGHT).unwrap(),
+            pixel_surface: texture_creator
+                .create_texture_static(PixelFormatEnum::RGB24, DISP_WIDTH, DISP_HEIGHT)
+                .unwrap(),
             char_data: load_char_set(),
             frame_count: 0,
             flash: false,
             txt_mode: true,
             hires_mode: false,
             mixed_mode: false,
-            use_pg2: false
+            use_pg2: false,
         }
     }
 }

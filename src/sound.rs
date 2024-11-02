@@ -1,4 +1,4 @@
-use sdl2::audio::{AudioDevice, AudioCallback, AudioSpecDesired};
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
 const SAMPLE_BUF_SZ: usize = 1024;
 const SAMPLE_VOLUME: f32 = 0.5;
@@ -11,7 +11,7 @@ mod soft_switch {
 pub struct SquareWave {
     buffer: [f32; SAMPLE_BUF_SZ],
     sample_idx: usize,
-    buf_idx: usize
+    buf_idx: usize,
 }
 
 impl SquareWave {
@@ -40,7 +40,7 @@ impl AudioCallback for SquareWave {
 
 pub struct SoundHandler {
     pub device: AudioDevice<SquareWave>,
-    pub polarity: bool
+    pub polarity: bool,
 }
 
 impl SoundHandler {
@@ -50,29 +50,31 @@ impl SoundHandler {
         let audio_spec = AudioSpecDesired {
             freq: Some(SAMPLE_RATE as i32),
             channels: Some(1),
-            samples: Some(512)
+            samples: Some(512),
         };
-    
+
         let wave = SquareWave {
             buffer: [0.0; SAMPLE_BUF_SZ],
             sample_idx: 0,
-            buf_idx: 0
+            buf_idx: 0,
         };
 
-        let device = audio_subsystem.open_playback(None, &audio_spec, |_| { wave }).unwrap();
+        let device = audio_subsystem
+            .open_playback(None, &audio_spec, |_| wave)
+            .unwrap();
 
         SoundHandler {
             device,
-            polarity: false
+            polarity: false,
         }
     }
-    
+
     pub fn insert_samples(&mut self, samples: &Vec<bool>) {
         let mut lock = self.device.lock();
         for s in samples {
             lock.insert_sample(match s {
-                true  =>  SAMPLE_VOLUME,
-                false => -SAMPLE_VOLUME
+                true => SAMPLE_VOLUME,
+                false => -SAMPLE_VOLUME,
             });
         }
     }

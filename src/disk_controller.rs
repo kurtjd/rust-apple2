@@ -5,8 +5,8 @@ TODO:
 -Handle proper reset behavior
 */
 
-use std::path::Path;
 use crate::wizard_of_woz::WozImage;
+use std::path::Path;
 
 const MAX_TRACK: u8 = 34;
 const MAX_PHASE: usize = 3;
@@ -20,15 +20,15 @@ mod soft_switch {
     pub const PHASE3_OFF: usize = PERIPH_IO_ADDR + 0x6;
     pub const DRIVES_OFF: usize = PERIPH_IO_ADDR + 0x8;
     pub const SEL_DRIVE1: usize = PERIPH_IO_ADDR + 0xA;
-    pub const SHIFT_OFF: usize  = PERIPH_IO_ADDR + 0xC;
-    pub const DISK_READ: usize  = PERIPH_IO_ADDR + 0xE;
-    pub const PHASE0_ON: usize  = PERIPH_IO_ADDR + 0x1;
-    pub const PHASE1_ON: usize  = PERIPH_IO_ADDR + 0x3;
-    pub const PHASE2_ON: usize  = PERIPH_IO_ADDR + 0x5;
-    pub const PHASE3_ON: usize  = PERIPH_IO_ADDR + 0x7;
-    pub const DRIVES_ON: usize  = PERIPH_IO_ADDR + 0x9;
+    pub const SHIFT_OFF: usize = PERIPH_IO_ADDR + 0xC;
+    pub const DISK_READ: usize = PERIPH_IO_ADDR + 0xE;
+    pub const PHASE0_ON: usize = PERIPH_IO_ADDR + 0x1;
+    pub const PHASE1_ON: usize = PERIPH_IO_ADDR + 0x3;
+    pub const PHASE2_ON: usize = PERIPH_IO_ADDR + 0x5;
+    pub const PHASE3_ON: usize = PERIPH_IO_ADDR + 0x7;
+    pub const DRIVES_ON: usize = PERIPH_IO_ADDR + 0x9;
     pub const SEL_DRIVE2: usize = PERIPH_IO_ADDR + 0xB;
-    pub const SHIFT_ON: usize   = PERIPH_IO_ADDR + 0xD;
+    pub const SHIFT_ON: usize = PERIPH_IO_ADDR + 0xD;
     pub const DISK_WRITE: usize = PERIPH_IO_ADDR + 0xF;
 }
 
@@ -45,7 +45,7 @@ pub struct DiskController {
     write_mode: bool,
     write_sense: bool,
     disk_image: Option<WozImage>,
-    motor_off_delay: u8
+    motor_off_delay: u8,
 }
 
 impl DiskController {
@@ -63,7 +63,7 @@ impl DiskController {
             write_mode: false,
             write_sense: false,
             disk_image: None,
-            motor_off_delay: 0
+            motor_off_delay: 0,
         }
     }
 
@@ -78,9 +78,7 @@ impl DiskController {
     }
 
     pub fn load_image(&mut self, image_path: &Path) {
-        self.disk_image = Some(
-            WozImage::new(image_path).unwrap()
-        );
+        self.disk_image = Some(WozImage::new(image_path).unwrap());
     }
 
     pub fn handle_motor_off_delay(&mut self) {
@@ -95,7 +93,7 @@ impl DiskController {
         }
     }
 
-    pub fn handle_soft_sw(&mut self, address: usize, ram: &mut[u8]) {
+    pub fn handle_soft_sw(&mut self, address: usize, ram: &mut [u8]) {
         if self.disk_image.is_none() {
             return;
         }
@@ -105,27 +103,27 @@ impl DiskController {
             soft_switch::PHASE0_OFF => {
                 self.phase_off(0);
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::PHASE1_OFF => {
                 self.phase_off(1);
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::PHASE2_OFF => {
                 self.phase_off(2);
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::PHASE3_OFF => {
                 self.phase_off(3);
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::DRIVES_OFF => {
                 self.motor_off_delay = 60; // 60 frames per second
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::SEL_DRIVE1 => {
                 self.current_drive = 1;
                 self.read_bit(address, ram);
-            },
+            }
             soft_switch::SHIFT_OFF => {
                 self.write_sense = false;
                 if !self.write_mode {
@@ -136,32 +134,32 @@ impl DiskController {
                     // I assume CPU waits for sequencer to shift out bits?
                     // So can just do it in one go?
                 }
-            },
+            }
             soft_switch::DISK_READ => {
                 self.write_mode = false;
                 self.read_bit(address, ram);
-            },
+            }
 
             // On
             soft_switch::PHASE0_ON => {
                 self.phase_on(0);
-            },
+            }
             soft_switch::PHASE1_ON => {
                 self.phase_on(1);
-            },
+            }
             soft_switch::PHASE2_ON => {
                 self.phase_on(2);
-            },
+            }
             soft_switch::PHASE3_ON => {
                 self.phase_on(3);
-            },
+            }
             soft_switch::DRIVES_ON => {
                 self.drives_on = true;
                 self.motor_off_delay = 0;
-            },
+            }
             soft_switch::SEL_DRIVE2 => {
                 self.current_drive = 2;
-            },
+            }
             soft_switch::SHIFT_ON => {
                 self.write_sense = true;
                 if self.write_mode {
@@ -169,10 +167,10 @@ impl DiskController {
                 } else {
                     self.data_reg = 0; // Apprently reading this addr clears data register
                 }
-            },
+            }
             soft_switch::DISK_WRITE => {
                 self.write_mode = true;
-            },
+            }
             _ => {}
         }
     }
@@ -182,13 +180,9 @@ impl DiskController {
         let ascending = (to > from && to - from < MAX_PHASE) || (to == 0 && from == MAX_PHASE);
         let descending = (to < from) || (to == MAX_PHASE && from == 0);
 
-        if ascending && self.half_track < MAX_TRACK * 2
-        {
+        if ascending && self.half_track < MAX_TRACK * 2 {
             self.half_track += 1;
-        }
-
-        else if descending && self.half_track > 0
-        {
+        } else if descending && self.half_track > 0 {
             self.half_track -= 1;
         }
 
@@ -211,12 +205,12 @@ impl DiskController {
         then move there */
         if self.current_phase == phase {
             let right_phase = match self.current_phase < MAX_PHASE {
-                true  => self.current_phase + 1,
-                false => 0
+                true => self.current_phase + 1,
+                false => 0,
             };
             let left_phase = match self.current_phase > 0 {
-                true  => self.current_phase - 1,
-                false => MAX_PHASE
+                true => self.current_phase - 1,
+                false => MAX_PHASE,
             };
 
             if self.phases[right_phase] {
@@ -264,7 +258,7 @@ impl DiskController {
         self.data_reg |= bit;
     }
 
-    fn read_bit(&mut self, address: usize, ram: &mut[u8]) {
+    fn read_bit(&mut self, address: usize, ram: &mut [u8]) {
         if !self.drives_on {
             return;
         }
@@ -274,7 +268,7 @@ impl DiskController {
             if self.write_sense {
                 self.data_reg = match self.disk_image.as_ref().unwrap().write_protected {
                     true => 1 << 7,
-                    false => 0
+                    false => 0,
                 };
             } else {
                 self.load_bit();
@@ -289,6 +283,5 @@ impl DiskController {
             self.data_reg = 0;
             self.reading_byte = false;
         }
-
     }
 }
