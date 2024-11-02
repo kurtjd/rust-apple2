@@ -1,4 +1,4 @@
-/* 
+/*
 Wizard of Woz simply parses a raw WOZ2 image and returns a struct containing pertinent info.
 Reference: https://applesaucefdc.com/woz/reference2
 */
@@ -21,12 +21,12 @@ mod section_id {
 
 pub struct WozTrack {
     pub bit_count: u32,
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 pub struct WozImage {
     pub write_protected: bool,
-    pub tracks: Vec<WozTrack>
+    pub tracks: Vec<WozTrack>,
 }
 
 // Data is stored in image in little-endian format
@@ -61,10 +61,7 @@ impl WozImage {
         // Lots of other things we can check in the future...
 
         if version == 2 && disk_type == 1 && boot_sectors != 2 && compatibile {
-            Ok(match write_protected {
-                1 => true,
-                _ => false
-            })
+            Ok(matches!(write_protected, 1))
         } else {
             Err("This WOZ image is not supported.")
         }
@@ -81,7 +78,7 @@ impl WozImage {
 
                 continue;
             }
-            
+
             if i % 4 == 0 && map != (i / 4) as u8 {
                 println!("Map: {map}, {}", i / 4);
                 return Err("This WOZ image uses unsupported track mapping.");
@@ -105,10 +102,7 @@ impl WozImage {
                 data.push(file_buf[block_addr + j]);
             }
 
-            tracks.push(WozTrack {
-                bit_count,
-                data
-            });
+            tracks.push(WozTrack { bit_count, data });
         }
     }
 
@@ -118,7 +112,9 @@ impl WozImage {
 
         if ext == "woz" {
             let mut image = File::open(file_path).expect("Failed to open WOZ image!");
-            image.read(&mut file_buf).expect("Failed to read WOZ image data!");
+            image
+                .read_exact(&mut file_buf)
+                .expect("Failed to read WOZ image data!");
         } else if ext == "dsk" {
             dsk2woz::convert(file_path, &mut file_buf, false);
         } else if ext == "po" {
@@ -141,13 +137,13 @@ impl WozImage {
             match chunk_id {
                 section_id::INFO => {
                     write_protected = WozImage::parse_info(&file_buf, buf_pntr)?;
-                },
+                }
                 section_id::TMAP => {
                     WozImage::verify_track_map(&file_buf, buf_pntr)?;
-                },
+                }
                 section_id::TRKS => {
                     WozImage::parse_tracks(&file_buf, buf_pntr, &mut tracks);
-                },
+                }
                 _ => {
                     break; // Unknown chunk, so stop
                 }
@@ -156,11 +152,9 @@ impl WozImage {
             buf_pntr += chunk_size as usize;
         }
 
-        Ok(
-            WozImage {
-                write_protected,
-                tracks
-            }
-        )
+        Ok(WozImage {
+            write_protected,
+            tracks,
+        })
     }
 }

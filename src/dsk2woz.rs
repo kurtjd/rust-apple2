@@ -75,7 +75,11 @@ fn fill_tmap(woz: &mut [u8]) {
 
 fn fill_trks(woz: &mut [u8], file_buf: &[u8], is_prodos: bool) {
     put_u32(section_id::TRKS, woz, 248);
-    put_u32(1280 + (BLOCK_SIZE * BLOCKS_PER_TRACK * NUM_TRACKS), woz, 252);
+    put_u32(
+        1280 + (BLOCK_SIZE * BLOCKS_PER_TRACK * NUM_TRACKS),
+        woz,
+        252,
+    );
 
     for i in 0..NUM_TRACKS {
         let idx = (BYTES_PER_SECTOR + (i * 8)) as usize;
@@ -87,13 +91,18 @@ fn fill_trks(woz: &mut [u8], file_buf: &[u8], is_prodos: bool) {
     let mut woz_idx = 0x600; // Start address of first track
     for i in 0..NUM_TRACKS {
         let dsk_idx = (BYTES_PER_SECTOR * NUM_SECTORS * i) as usize;
-        convert_track(&mut woz[woz_idx..], &file_buf[dsk_idx..], i as u8, is_prodos);
+        convert_track(
+            &mut woz[woz_idx..],
+            &file_buf[dsk_idx..],
+            i as u8,
+            is_prodos,
+        );
         woz_idx += (BLOCK_SIZE * BLOCKS_PER_TRACK) as usize;
     }
 }
 
 fn write_bit(woz: &mut [u8], bit_pntr: &mut usize, bit: u8) {
-    let byte_idx = *bit_pntr as usize / 8;
+    let byte_idx = *bit_pntr / 8;
     let bit_on = *bit_pntr % 8;
     woz[byte_idx] |= bit << (7 - bit_on);
     *bit_pntr += 1;
@@ -120,33 +129,30 @@ fn write_sync(woz: &mut [u8], bit_pntr: &mut usize) {
 
 fn convert_6_2(dsk: &[u8]) -> [u8; GCR_BYTES_PER_SECTOR as usize] {
     let map = [
-        0x96, 0x97, 0x9A, 0x9B, 0x9D, 0x9E, 0x9F, 0xA6,
-        0xA7, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB2, 0xB3,
-        0xB4, 0xB5, 0xB6, 0xB7, 0xB9, 0xBA, 0xBB, 0xBC,
-        0xBD, 0xBE, 0xBF, 0xCB, 0xCD, 0xCE, 0xCF, 0xD3,
-        0xD6, 0xD7, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE,
-        0xDF, 0xE5, 0xE6, 0xE7, 0xE9, 0xEA, 0xEB, 0xEC,
-        0xED, 0xEE, 0xEF, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6,
-        0xF7, 0xF9, 0xFa, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
+        0x96, 0x97, 0x9A, 0x9B, 0x9D, 0x9E, 0x9F, 0xA6, 0xA7, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB2,
+        0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xCB, 0xCD, 0xCE,
+        0xCF, 0xD3, 0xD6, 0xD7, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF, 0xE5, 0xE6, 0xE7, 0xE9,
+        0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF9, 0xFA, 0xFB,
+        0xFC, 0xFD, 0xFE, 0xFF,
     ];
 
     let mut gcr_bytes = [0; GCR_BYTES_PER_SECTOR as usize];
 
     let bit_reverse = [0, 2, 1, 3];
     for i in 0..84 {
-        gcr_bytes[i] = bit_reverse[(dsk[i] & 3) as usize] |
-                     (bit_reverse[(dsk[i + 86] & 3) as usize] << 2) |
-                     (bit_reverse[(dsk[i + 172] & 3) as usize] << 4);
+        gcr_bytes[i] = bit_reverse[(dsk[i] & 3) as usize]
+            | (bit_reverse[(dsk[i + 86] & 3) as usize] << 2)
+            | (bit_reverse[(dsk[i + 172] & 3) as usize] << 4);
     }
-    gcr_bytes[84] = bit_reverse[(dsk[84] & 3) as usize] |
-                  (bit_reverse[(dsk[170] & 3) as usize] << 2);
-    gcr_bytes[85] = bit_reverse[(dsk[85] & 3) as usize] |
-                  (bit_reverse[(dsk[171] & 3) as usize] << 2);
+    gcr_bytes[84] =
+        bit_reverse[(dsk[84] & 3) as usize] | (bit_reverse[(dsk[170] & 3) as usize] << 2);
+    gcr_bytes[85] =
+        bit_reverse[(dsk[85] & 3) as usize] | (bit_reverse[(dsk[171] & 3) as usize] << 2);
 
     for i in 0..BYTES_PER_SECTOR as usize {
         gcr_bytes[86 + i] = dsk[i] >> 2;
     }
-    
+
     let mut idx = (GCR_BYTES_PER_SECTOR - 1) as usize;
     gcr_bytes[idx] = gcr_bytes[idx - 1];
     while idx > 1 {
@@ -198,11 +204,11 @@ fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8, is_prodos: bool) {
 
         let scalar = match is_prodos {
             true => 8,
-            false => 7
+            false => 7,
         };
         let logical_sector = match i == 15 {
             true => 15,
-            false => (i as usize * scalar) % 15
+            false => (i as usize * scalar) % 15,
         };
 
         // Convert 256 data bytes into 343 6 and 2 encoded disk bytes
@@ -226,7 +232,9 @@ fn convert_track(woz: &mut [u8], dsk: &[u8], track: u8, is_prodos: bool) {
 pub fn convert(file_path: &Path, woz: &mut [u8], is_prodos: bool) {
     let mut file_buf = [0; DSK_IMG_SIZE];
     let mut image = File::open(file_path).expect("Failed to open DSK image!");
-    image.read(&mut file_buf).expect("Failed to read DSK image data!");
+    image
+        .read_exact(&mut file_buf)
+        .expect("Failed to read DSK image data!");
 
     fill_header(woz);
     fill_info(woz);

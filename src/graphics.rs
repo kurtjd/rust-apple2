@@ -107,7 +107,7 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
     /* Scan each bit (except the MSB), mapping it to a color depending on its value and its
     neighboring bits . */
     let mut tmp = val;
-    for i in 0..7 {
+    for (i, pixel) in pixel_map.iter_mut().enumerate() {
         let dot = tmp & 1;
         let left_dot = match i == 0 {
             true => left_block_dot,
@@ -156,7 +156,7 @@ fn to_pixel_map(buffer: &[u8], buf_idx: usize, block_col: usize) -> [u32; BLOCK_
         };
 
         tmp >>= 1;
-        pixel_map[i] = color;
+        *pixel = color;
     }
 
     pixel_map
@@ -173,7 +173,7 @@ impl <'a> GraphicsHandler<'a> {
 
     fn draw_pixel(&mut self, color: u32, idx: usize) {
         for i in 0..PIXEL_SIZE as usize {
-            self.pixel_buf[idx + i] = ((color >> 16 - (8 * i)) & 0xFF) as u8;
+            self.pixel_buf[idx + i] = ((color >> (16 - (8 * i))) & 0xFF) as u8;
         }
     }
 
@@ -246,8 +246,8 @@ impl <'a> GraphicsHandler<'a> {
 
         // Each nybble represents the top half and bottom half colors of a block
         // A lookup table is used to map the nybble value to a color
-        let lower_color = color_map[(val >> 4) as usize] as u32;
-        let upper_color = color_map[(val & 0xF) as usize] as u32;
+        let lower_color = color_map[(val >> 4) as usize];
+        let upper_color = color_map[(val & 0xF) as usize];
 
         let mut pbuf_idx = block_to_pbuf_idx(block_idx);
         for j in 0..BLOCK_HEIGHT {

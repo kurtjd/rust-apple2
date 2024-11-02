@@ -78,11 +78,14 @@ impl SoundHandler {
     }
 
     pub fn handle_soft_sw(&mut self, address: usize) {
-        match address {
+        /*match address {
             soft_switch::SPEAKER => {
                 self.polarity = !self.polarity;
             },
             _ => {}
+        }*/
+        if address == soft_switch::SPEAKER {
+            self.polarity = !self.polarity;
         }
     }
 }

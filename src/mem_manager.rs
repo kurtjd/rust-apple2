@@ -30,8 +30,7 @@ mod soft_switch {
 #[derive(Clone)]
 pub struct Cycle {
     pub address: usize,
-    pub value: u8,
-    pub ctype: String
+    pub ctype: String,
 }
 
 pub struct MemManager {
@@ -44,7 +43,7 @@ pub struct MemManager {
     ram_write: bool,
     write_en_count: u8,
 
-    pub cycles: Vec<Cycle>
+    pub cycles: Vec<Cycle>,
 }
 
 impl MemManager {
@@ -70,47 +69,38 @@ impl MemManager {
             false => match address < EXT_RAM_START {
                 true => match self.bank2_active {
                     true => self.bank2_ram[address - BANK_RAM_START],
-                    false => self.bank1_ram[address - BANK_RAM_START]
+                    false => self.bank1_ram[address - BANK_RAM_START],
                 },
 
-                false => self.ext_ram[address - EXT_RAM_START]
-            }
+                false => self.ext_ram[address - EXT_RAM_START],
+            },
         };
 
         self.cycles.push(Cycle {
             address,
-            value,
-            ctype: "read".to_string()
+            ctype: "read".to_string(),
         });
-        
+
         value
     }
 
     pub fn mem_write(&mut self, address: usize, value: u8) {
         self.cycles.push(Cycle {
             address,
-            value,
-            ctype: "write".to_string()
+            ctype: "write".to_string(),
         });
 
-        match address < ROM_START {
-            true => self.memory[address] = value,
-
-            false => match self.ram_write {
-                true => match address >= BANK_RAM_START {
-                    true => match address < EXT_RAM_START {
-                        true => match self.bank2_active {
-                            true => self.bank2_ram[address - BANK_RAM_START] = value,
-                            false => self.bank1_ram[address - BANK_RAM_START] = value
-                        },
-
-                        false => self.ext_ram[address - EXT_RAM_START] = value
-                    }, 
-
-                    false => {}
-                },
-
-                false => {}
+        if address < ROM_START {
+            self.memory[address] = value
+        } else if self.ram_write && address >= BANK_RAM_START {
+            if address < EXT_RAM_START {
+                if self.bank2_active {
+                    self.bank2_ram[address - BANK_RAM_START] = value;
+                } else {
+                    self.bank1_ram[address - BANK_RAM_START] = value;
+                }
+            } else {
+                self.ext_ram[address - EXT_RAM_START] = value;
             }
         }
     }
@@ -143,28 +133,28 @@ impl MemManager {
         match address {
             soft_switch::BANK2_RAM_READ_NO_WRITE | soft_switch::BANK2_RAM_READ_NO_WRITE_ALT => {
                 self.read_enable(true, false);
-            },
+            }
             soft_switch::BANK2_ROM_READ_WRITE | soft_switch::BANK2_ROM_READ_WRITE_ALT => {
                 self.write_enable(true, true);
-            },
+            }
             soft_switch::BANK2_ROM_READ_NO_WRITE | soft_switch::BANK2_ROM_READ_NO_WRITE_ALT => {
                 self.read_enable(true, true);
-            },
+            }
             soft_switch::BANK2_RAM_READ_WRITE | soft_switch::BANK2_RAM_READ_WRITE_ALT => {
                 self.write_enable(true, false);
-            },
+            }
             soft_switch::BANK1_RAM_READ_NO_WRITE | soft_switch::BANK1_RAM_READ_NO_WRITE_ALT => {
                 self.read_enable(false, false);
-            },
+            }
             soft_switch::BANK1_ROM_READ_WRITE | soft_switch::BANK1_ROM_READ_WRITE_ALT => {
                 self.write_enable(false, true);
-            },
+            }
             soft_switch::BANK1_ROM_READ_NO_WRITE | soft_switch::BANK1_ROM_READ_NO_WRITE_ALT => {
                 self.read_enable(false, true);
-            },
+            }
             soft_switch::BANK1_RAM_READ_WRITE | soft_switch::BANK1_RAM_READ_WRITE_ALT => {
                 self.write_enable(false, false);
-            },
+            }
             _ => {}
         }
     }

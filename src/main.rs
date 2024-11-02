@@ -1,21 +1,21 @@
 mod apple2;
-mod sound;
-mod graphics;
 mod disk_controller;
-mod wizard_of_woz;
 mod dsk2woz;
+mod graphics;
 mod mem_manager;
+mod sound;
+mod wizard_of_woz;
 
 use apple2::Apple2;
 use mem_manager::MemManager;
 
-use std::time::{Instant, Duration};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
-use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
+use sdl2::EventPump;
 
 const FRAME_RATE: u32 = 60;
 const US_PER_FRAME: u64 = 1000000 / FRAME_RATE as u64;
@@ -25,13 +25,20 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
 
     for event in event_pump.poll_iter() {
         match event {
-            Event::Quit {..} => {
+            Event::Quit { .. } => {
                 return false;
             }
-            Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+            Event::KeyDown {
+                keycode: Some(Keycode::Escape),
+                ..
+            } => {
                 apple2.reset();
             }
-            Event::KeyDown { keycode: Some(keycode), keymod, .. } => {
+            Event::KeyDown {
+                keycode: Some(keycode),
+                keymod,
+                ..
+            } => {
                 // Special case for arrow keys because they don't have an ASCII code
                 if keycode == Keycode::Right {
                     apple2.input_char(apple2::KEY_RIGHT);
@@ -43,7 +50,7 @@ fn handle_input(apple2: &mut Apple2, event_pump: &mut EventPump) -> bool {
 
                 // Convert lowercase to uppercase
                 let mut ascii = keycode as u8;
-                if ascii >= b'a' && ascii <= b'z' {
+                if ascii.is_ascii_lowercase() {
                     ascii -= 32;
                 }
 
@@ -80,13 +87,18 @@ fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     // Initialize video
-    /* Would be nice to move this all into the graphics module, but that requires making a 
+    /* Would be nice to move this all into the graphics module, but that requires making a
     self-referential data structure which is diffiult in Rust. Will revisit this in the future. */
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window(
-        "Apple ][+",
-        graphics::DISP_WIDTH * graphics::DISP_SCALE,
-        graphics::DISP_HEIGHT * graphics::DISP_SCALE).position_centered().build().unwrap();
+    let window = video_subsystem
+        .window(
+            "Apple ][+",
+            graphics::DISP_WIDTH * graphics::DISP_SCALE,
+            graphics::DISP_HEIGHT * graphics::DISP_SCALE,
+        )
+        .position_centered()
+        .build()
+        .unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
 

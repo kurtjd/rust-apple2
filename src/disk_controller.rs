@@ -14,7 +14,7 @@ const MAX_PHASE: usize = 3;
 mod soft_switch {
     const PERIPH_IO_ADDR: usize = 0xC080;
 
-    pub const PHASE0_OFF: usize = PERIPH_IO_ADDR + 0x0;
+    pub const PHASE0_OFF: usize = PERIPH_IO_ADDR;
     pub const PHASE1_OFF: usize = PERIPH_IO_ADDR + 0x2;
     pub const PHASE2_OFF: usize = PERIPH_IO_ADDR + 0x4;
     pub const PHASE3_OFF: usize = PERIPH_IO_ADDR + 0x6;
